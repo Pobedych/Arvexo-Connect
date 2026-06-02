@@ -76,7 +76,10 @@ export function CabinetApp() {
         })
       });
       if (!response.ok) {
-        throw new Error(isRegistration ? "Не удалось создать Arvexo Account" : "Неверный email или пароль");
+        if (isRegistration && response.status === 409) {
+          throw new Error("Аккаунт с таким email уже есть. Переключитесь на вход.");
+        }
+        throw new Error(await readApiError(response, isRegistration ? "Не удалось создать Arvexo Account" : "Неверный email или пароль"));
       }
       applyAuthPayload((await response.json()) as AuthResponse);
     } catch (err) {
@@ -346,4 +349,15 @@ function getApiBase() {
     return "http://127.0.0.1:8012";
   }
   return "https://api.arvexo.ru";
+}
+
+async function readApiError(response: Response, fallback: string) {
+  try {
+    const body = (await response.json()) as { detail?: string | { msg?: string }[] };
+    if (typeof body.detail === "string" && body.detail.trim()) return body.detail;
+    if (Array.isArray(body.detail) && body.detail[0]?.msg) return body.detail[0].msg;
+  } catch {
+    // Keep the fallback when the API did not return JSON.
+  }
+  return fallback;
 }
