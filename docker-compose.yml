@@ -1,48 +1,57 @@
 services:
   frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: arvexo-connect-frontend
-    restart: unless-stopped
+    image: node:22-alpine
+    container_name: arvexo-connect-frontend-dev
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --hostname 0.0.0.0 --port 3000"
     ports:
       - "127.0.0.1:3002:3000"
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       NEXT_TELEMETRY_DISABLED: "1"
-      PORT: "3000"
-      HOSTNAME: "0.0.0.0"
+      NEXT_PUBLIC_API_BASE_URL: "http://127.0.0.1:8012"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
     depends_on:
-      - backend
+      backend:
+        condition: service_started
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: arvexo-connect-core
-    restart: unless-stopped
+    image: python:3.12-slim
+    container_name: arvexo-connect-core-dev
+    working_dir: /app
+    command: sh -c "pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     env_file:
-      - ./backend/.env
+      - ./backend/.env.dev
     ports:
       - "127.0.0.1:8012:8000"
+    volumes:
+      - ./backend:/app
+      - backend_pip_cache:/root/.cache/pip
     depends_on:
       postgres:
         condition: service_healthy
 
   bot:
-    build:
-      context: ./bot
-      dockerfile: Dockerfile
-    container_name: arvexo-connect-bot
-    restart: unless-stopped
+    image: python:3.12-slim
+    container_name: arvexo-connect-bot-dev
+    working_dir: /app
+    command: sh -c "pip install -r requirements.txt && python -m app.main"
     env_file:
-      - ./bot/.env
+      - ./bot/.env.dev
+    volumes:
+      - ./bot:/app
+      - bot_pip_cache:/root/.cache/pip
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+    profiles:
+      - bot
 
   postgres:
     image: postgres:16-alpine
-    container_name: arvexo-connect-postgres
+    container_name: arvexo-connect-postgres-dev
     restart: unless-stopped
     environment:
       POSTGRES_DB: arvexo_connect
@@ -51,7 +60,7 @@ services:
     ports:
       - "127.0.0.1:6432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_dev:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U arvexo -d arvexo_connect"]
       interval: 5s
@@ -60,4 +69,7 @@ services:
       start_period: 10s
 
 volumes:
-  postgres_data:
+  postgres_data_dev:
+  frontend_node_modules:
+  backend_pip_cache:
+  bot_pip_cache:

@@ -10,11 +10,13 @@ frontend/npm-debug.log
 frontend/.env
 frontend/.env.local
 backend/.env
+backend/.env.prod
 backend/.venv
 backend/__pycache__
 backend/app/**/__pycache__
 backend/app/**/*.pyc
 bot/.env
+bot/.env.prod
 bot/.venv
 bot/**/__pycache__
 bot/**/*.pyc

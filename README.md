@@ -16,12 +16,46 @@ https://sub.arvexo.ru/u/{token}
 
 In MVP this endpoint proxies the original 3x-ui subscription URL. The selected `routing_mode` is stored and can be changed from the cabinet or bot.
 
-## Run
+## Development Run
 
-Create backend env:
+Development compose uses hot reload and local dev env files:
+
+```bash
+docker compose up -d
+```
+
+Run migrations:
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+Start dev bot too:
+
+```bash
+docker compose --profile bot up -d bot
+```
+
+Dev ports:
+
+- Frontend: `127.0.0.1:3002`
+- Backend: `127.0.0.1:8012`
+- PostgreSQL external port: `127.0.0.1:6432`
+- PostgreSQL internal Docker address: `postgres:5432`
+
+## Production Run
+
+Production compose builds immutable images and starts frontend, backend, bot, and postgres together:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Create production env files on the server:
 
 ```bash
 cp backend/.env.example backend/.env
+cp bot/.env.example bot/.env
 ```
 
 Set production secrets in `backend/.env`:
@@ -39,16 +73,10 @@ XUI_SUB_PATH=/arvexo/
 XUI_DEFAULT_INBOUND_IDS=1,2,3,4,6
 ```
 
-Start services:
-
-```bash
-docker compose up -d --build
-```
-
 Run migrations:
 
 ```bash
-docker compose exec backend alembic upgrade head
+docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
 ```
 
 Health check:
@@ -57,12 +85,7 @@ Health check:
 curl http://127.0.0.1:8012/health
 ```
 
-## Ports
-
-- Frontend: `127.0.0.1:3002`
-- Backend: `127.0.0.1:8012`
-- PostgreSQL external port: `127.0.0.1:6432`
-- PostgreSQL internal Docker address: `postgres:5432`
+Production ports are the same: frontend `3002`, backend `8012`, postgres `6432`.
 
 ## Create Test User
 
@@ -146,10 +169,10 @@ BOT_INTERNAL_TOKEN=same_as_backend_bot_token
 SUPPORT_URL=https://t.me/arvexo_support
 ```
 
-Run with Docker profile:
+Run bot in production:
 
 ```bash
-docker compose --profile bot up -d --build bot
+docker compose -f docker-compose.prod.yml up -d --build bot
 ```
 
 ## API Checks
