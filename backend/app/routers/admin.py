@@ -11,6 +11,7 @@ from app.enums import OrderStatus, RoutingMode
 from app.models.order import Order
 from app.models.user import User
 from app.schemas.billing import AdminConfirmOrderResponse
+from app.schemas.promo import CreatePromoCodeRequest, CreatePromoCodeResponse, PromoCodesResponse
 from app.schemas.admin import (
     CreateAccessKeyResponse,
     CreateSubscriptionRequest,
@@ -32,6 +33,7 @@ from app.services.access_key_service import create_access_key
 from app.models.vpn_subscription import VpnSubscription
 from app.services.billing_service import load_order_for_output, order_to_out, require_order
 from app.services.provisioning_service import provision_subscription, provision_subscription_for_user
+from app.services.promo_service import create_promo_code, list_promo_codes, promo_code_to_out
 from app.services.subscription_service import get_subscription_by_token
 from app.services.subscription_service import (
     create_subscription,
@@ -120,6 +122,33 @@ async def list_users(session: AsyncSession = Depends(get_db_session)):
 async def list_subscriptions(session: AsyncSession = Depends(get_db_session)):
     result = await session.execute(select(VpnSubscription).order_by(VpnSubscription.created_at.desc()))
     return AdminSubscriptionListResponse(subscriptions=[subscription_to_out(item) for item in result.scalars().all()])
+
+
+@router.get("/promo-codes", response_model=PromoCodesResponse)
+async def admin_list_promo_codes(session: AsyncSession = Depends(get_db_session)):
+    promo_codes = await list_promo_codes(session)
+    return PromoCodesResponse(promo_codes=[promo_code_to_out(promo) for promo in promo_codes])
+
+
+@router.post("/promo-codes", response_model=CreatePromoCodeResponse, status_code=status.HTTP_201_CREATED)
+async def admin_create_promo_code(payload: CreatePromoCodeRequest, session: AsyncSession = Depends(get_db_session)):
+    promo, plain_code = await create_promo_code(
+        session=session,
+        plan_code=payload.plan_code,
+        max_redemptions=payload.max_redemptions,
+        expires_at=payload.expires_at,
+        note=payload.note,
+        code_prefix=payload.code_prefix,
+    )
+    await session.commit()
+    promo_codes = await list_promo_codes(session)
+    created = next(item for item in promo_codes if item.id == promo.id)
+    return CreatePromoCodeResponse(
+        ok=True,
+        promo_code=promo_code_to_out(created),
+        code=plain_code,
+        warning="This promo code is shown only once. Store it securely.",
+    )
 
 
 @router.post("/orders/{order_id}/confirm", response_model=AdminConfirmOrderResponse)

@@ -37,3 +37,8 @@ class OrderStatus(StrEnum):
 
 class PaymentMethod(StrEnum):
     CRYPTO_MANUAL = "crypto_manual"
+
+
+class PromoCodeStatus(StrEnum):
+    ACTIVE = "active"
+    DISABLED = "disabled"

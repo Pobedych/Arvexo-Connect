@@ -10,6 +10,7 @@ from app.models.mixins import TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.order import Order
+    from app.models.promo_code import PromoCode
     from app.models.vpn_subscription import VpnSubscription
 
 
@@ -29,4 +30,5 @@ class Plan(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     orders: Mapped[list["Order"]] = relationship(back_populates="plan")
+    promo_codes: Mapped[list["PromoCode"]] = relationship(back_populates="plan", cascade="all, delete-orphan")
     subscriptions: Mapped[list["VpnSubscription"]] = relationship(back_populates="plan")

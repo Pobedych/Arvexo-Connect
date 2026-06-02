@@ -24,6 +24,11 @@ def generate_access_key() -> str:
     return "-".join(parts)
 
 
+def generate_promo_code(prefix: str = "FAMILY") -> str:
+    normalized_prefix = "".join(char for char in prefix.upper() if char.isalnum())[:12] or "PROMO"
+    return f"{normalized_prefix}-{secrets.token_hex(2).upper()}-{secrets.token_hex(2).upper()}"
+
+
 def hash_access_key(access_key: str) -> str:
     salt = secrets.token_hex(16)
     digest = hashlib.pbkdf2_hmac("sha256", access_key.encode("utf-8"), salt.encode("utf-8"), 120_000)
@@ -39,6 +44,18 @@ def verify_access_key(access_key: str, stored_hash: str) -> bool:
         return False
     candidate = hashlib.pbkdf2_hmac("sha256", access_key.encode("utf-8"), salt.encode("utf-8"), 120_000)
     return hmac.compare_digest(candidate.hex(), digest)
+
+
+def hash_promo_code(code: str) -> str:
+    return hash_access_key(normalize_promo_code(code))
+
+
+def verify_promo_code(code: str, stored_hash: str) -> bool:
+    return verify_access_key(normalize_promo_code(code), stored_hash)
+
+
+def normalize_promo_code(code: str) -> str:
+    return code.strip().upper()
 
 
 def hash_password(password: str) -> str:

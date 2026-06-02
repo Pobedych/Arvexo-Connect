@@ -16,6 +16,7 @@ from app.schemas.billing import (
 )
 from app.schemas.cabinet import ChangeModeRequest, ChangeModeResponse
 from app.schemas.common import SubscriptionOut, subscription_to_out
+from app.schemas.promo import RedeemPromoCodeRequest, RedeemPromoCodeResponse
 from app.services.billing_service import (
     create_order_for_user,
     list_active_plans,
@@ -26,6 +27,7 @@ from app.services.billing_service import (
     require_user_order,
     submit_order_payment,
 )
+from app.services.promo_service import redeem_promo_code
 from app.services.subscription_service import (
     require_subscription_by_token,
     set_subscription_mode,
@@ -79,6 +81,17 @@ async def submit_order_payment_endpoint(
     await session.commit()
     order = await load_order_for_output(session, order.id)
     return CreateOrderResponse(ok=True, order=order_to_out(order))
+
+
+@router.post("/promo-codes/redeem", response_model=RedeemPromoCodeResponse)
+async def redeem_promo_code_endpoint(
+    payload: RedeemPromoCodeRequest,
+    user_id: UUID = Depends(require_cabinet_user_id),
+    session: AsyncSession = Depends(get_db_session),
+):
+    subscription = await redeem_promo_code(session, user_id, payload.code)
+    await session.commit()
+    return RedeemPromoCodeResponse(ok=True, subscription=subscription, message="Promo code redeemed. Subscription activated.")
 
 
 @router.get("/subscription/{token}", response_model=SubscriptionOut)

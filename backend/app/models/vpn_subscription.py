@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.device import Device
     from app.models.order import Order
     from app.models.plan import Plan
+    from app.models.promo_redemption import PromoRedemption
     from app.models.user import User
 
 class VpnSubscription(TimestampMixin, Base):
@@ -39,3 +40,4 @@ class VpnSubscription(TimestampMixin, Base):
     plan: Mapped[Optional["Plan"]] = relationship(back_populates="subscriptions")
     devices: Mapped[list["Device"]] = relationship(back_populates="subscription", cascade="all, delete-orphan")
     orders: Mapped[list["Order"]] = relationship(back_populates="subscription")
+    promo_redemptions: Mapped[list["PromoRedemption"]] = relationship(back_populates="subscription")

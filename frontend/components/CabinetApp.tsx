@@ -39,6 +39,7 @@ export function CabinetApp() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [accessKey, setAccessKey] = useState("");
+  const [promoCode, setPromoCode] = useState("");
   const [jwt, setJwt] = useState(() => (typeof window === "undefined" ? "" : localStorage.getItem(JWT_STORAGE_KEY) || ""));
   const [data, setData] = useState<AuthResponse | null>(null);
   const [selectedToken, setSelectedToken] = useState<string>("");
@@ -136,6 +137,37 @@ export function CabinetApp() {
       setMessage("Режим изменён. Чтобы применить его, обновите подписку в VPN-приложении.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось изменить режим");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function redeemPromoCode() {
+    if (!jwt || !promoCode.trim()) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch(`${getApiBase()}/api/cabinet/promo-codes/redeem`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+        body: JSON.stringify({ code: promoCode.trim() })
+      });
+      if (response.status === 401 || response.status === 403) {
+        logout(true);
+        return;
+      }
+      if (!response.ok) throw new Error(await readApiError(response, "Промокод не найден или уже использован"));
+      const payload = (await response.json()) as { subscription: Subscription; message: string };
+      setData((current) => {
+        if (!current) return current;
+        return { ...current, subscriptions: [payload.subscription, ...current.subscriptions] };
+      });
+      setSelectedToken(payload.subscription.token);
+      setPromoCode("");
+      setMessage("Промокод применен. Подписка активирована.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось применить промокод");
     } finally {
       setLoading(false);
     }
@@ -247,6 +279,24 @@ export function CabinetApp() {
                   <Link href="/cabinet/plans" className="mt-6 inline-flex min-h-12 items-center rounded-lg bg-[#ef233c] px-5 text-sm font-bold">
                     Выбрать тариф
                   </Link>
+                  <div className="mt-6 rounded-2xl border border-white/[0.08] bg-black/25 p-4">
+                    <p className="text-sm font-semibold">Промокод</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+                      <input
+                        value={promoCode}
+                        onChange={(event) => setPromoCode(event.target.value)}
+                        placeholder="FAMILY-XXXX-XXXX"
+                        className="h-12 rounded-lg border border-white/[0.1] bg-black px-4 text-white outline-none focus:border-[#ef233c]"
+                      />
+                      <button
+                        onClick={redeemPromoCode}
+                        disabled={loading || promoCode.trim().length < 4}
+                        className="min-h-12 rounded-lg bg-white px-5 text-sm font-bold text-black disabled:opacity-50"
+                      >
+                        Применить
+                      </button>
+                    </div>
+                  </div>
                 </>
               )}
               {subscription && (

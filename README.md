@@ -187,6 +187,20 @@ curl -X POST http://127.0.0.1:8012/api/admin/orders/<order_id>/confirm \
   -H "X-Admin-Token: change_me_admin_token"
 ```
 
+Family promo codes can issue a free subscription without payment. The code is returned only once and only the hash is stored:
+
+```bash
+curl -X POST http://127.0.0.1:8012/api/admin/promo-codes \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Token: change_me_admin_token" \
+  -d '{"plan_code":"family","max_redemptions":5,"code_prefix":"FAMILY","note":"Family access"}'
+
+curl -X POST http://127.0.0.1:8012/api/cabinet/promo-codes/redeem \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -d '{"code":"FAMILY-XXXX-XXXX"}'
+```
+
 For browser calls set:
 
 ```env
