@@ -40,6 +40,7 @@ const navItems = [
   { href: "#servers", label: "Серверы" },
   { href: "#pricing", label: "Тарифы" },
   { href: "#how-it-works", label: "Инструкция" },
+  { href: "/cabinet/login", label: "Кабинет" },
   { href: "#support", label: "Поддержка" }
 ];
 
@@ -283,7 +284,7 @@ function Header({
         </nav>
 
         <div className="hidden items-center gap-3 lg:flex">
-          <a href="#pricing" className="rounded-lg px-4 py-2 text-sm font-semibold text-white/70 transition hover:text-white">
+          <a href="/cabinet/login" className="rounded-lg px-4 py-2 text-sm font-semibold text-white/70 transition hover:text-white">
             Войти
           </a>
           <a
@@ -317,6 +318,13 @@ function Header({
               {item.label}
             </a>
           ))}
+          <a
+            href="/cabinet/login"
+            className="rounded-lg border border-white/[0.1] bg-white/[0.04] px-4 py-3 text-center text-sm font-semibold text-white"
+            onClick={() => setMenuOpen(false)}
+          >
+            Войти в кабинет
+          </a>
           <a
             href="#pricing"
             className="rounded-lg bg-[#ef233c] px-4 py-3 text-center text-sm font-semibold text-white"
@@ -1123,7 +1131,7 @@ function FinalCTA() {
 
 function ConnectFooter() {
   const columns = [
-    ["Product", "Возможности", "Режимы", "Тарифы", "Инструкция"],
+    ["Product", "Возможности", "Режимы", "Тарифы", "Инструкция", "Личный кабинет"],
     ["Company", "Arvexo", "Контакты", "Статус серверов"],
     ["Support", "Telegram", "FAQ", "Документация"],
     ["Legal", "Политика конфиденциальности", "Условия использования"]
@@ -1149,7 +1157,7 @@ function ConnectFooter() {
               <h3 className="text-sm font-bold text-white">{title}</h3>
               <div className="mt-4 grid gap-3">
                 {links.map((link) => (
-                  <a key={link} href="#top" className="text-sm text-white/50 transition hover:text-white">
+                  <a key={link} href={footerHref(link)} className="text-sm text-white/50 transition hover:text-white">
                     {link}
                   </a>
                 ))}
@@ -1160,6 +1168,20 @@ function ConnectFooter() {
       </div>
     </footer>
   );
+}
+
+function footerHref(label: string) {
+  const hrefs: Record<string, string> = {
+    Возможности: "#features",
+    Режимы: "#modes",
+    Тарифы: "#pricing",
+    Инструкция: "#how-it-works",
+    "Личный кабинет": "/cabinet/login",
+    Telegram: "https://t.me/arvexo_support",
+    FAQ: "#support"
+  };
+
+  return hrefs[label] || "#top";
 }
 
 function InfoCard({
