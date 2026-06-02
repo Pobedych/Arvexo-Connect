@@ -85,3 +85,26 @@ async def test_login_account_with_wrong_password_returns_401(client):
     response = await client.post("/api/auth/login", json={"email": "alex@example.com", "password": "wrongpass123"})
 
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_current_account_with_token_returns_session(client):
+    register = await client.post(
+        "/api/auth/register",
+        json={"email": "me@example.com", "password": "strongpass123", "display_name": "Me"},
+    )
+    jwt = register.json()["access_token"]
+
+    response = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {jwt}"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["access_token"]
+    assert payload["user_id"] == register.json()["user_id"]
+
+
+@pytest.mark.asyncio
+async def test_current_account_without_token_returns_401(client):
+    response = await client.get("/api/auth/me")
+
+    assert response.status_code == 401

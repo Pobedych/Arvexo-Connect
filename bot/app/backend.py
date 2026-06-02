@@ -23,6 +23,29 @@ class BackendClient:
             response.raise_for_status()
             return response.json()
 
+    async def consume_link_token(
+        self,
+        token: str,
+        telegram_id: int,
+        username: str | None,
+        first_name: str | None,
+        language_code: str | None,
+    ) -> dict:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                f"{self.base_url}/api/telegram/link-token/consume",
+                headers=self.headers,
+                json={
+                    "token": token,
+                    "telegram_id": telegram_id,
+                    "username": username,
+                    "first_name": first_name,
+                    "language_code": language_code,
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+
     async def subscriptions(self, telegram_id: int) -> list[dict]:
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.get(

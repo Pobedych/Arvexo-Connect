@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Copy, LogOut, QrCode, ShieldCheck } from "lucide-react";
 
 type Subscription = {
@@ -24,6 +24,14 @@ type AuthResponse = {
   subscriptions: Subscription[];
 };
 
+type Device = {
+  id: string;
+  name: string | null;
+  type: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
 const modes = [
   { value: "smart", title: "Smart Russia", text: "Локальные сервисы напрямую, зарубежные через защищенный туннель." },
   { value: "privacy", title: "Privacy", text: "Почти весь трафик идет через защищенный туннель." },
@@ -40,12 +48,18 @@ export function CabinetApp() {
   const [displayName, setDisplayName] = useState("");
   const [accessKey, setAccessKey] = useState("");
   const [promoCode, setPromoCode] = useState("");
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [deviceName, setDeviceName] = useState("");
+  const [deviceType, setDeviceType] = useState("phone");
+  const [telegramConnected, setTelegramConnected] = useState(false);
+  const [telegramLink, setTelegramLink] = useState("");
   const [jwt, setJwt] = useState(() => (typeof window === "undefined" ? "" : localStorage.getItem(JWT_STORAGE_KEY) || ""));
   const [data, setData] = useState<AuthResponse | null>(null);
   const [selectedToken, setSelectedToken] = useState<string>("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [restoringSession, setRestoringSession] = useState(() => Boolean(jwt));
 
   const subscription = useMemo(() => {
     if (!data?.subscriptions.length) return null;
@@ -60,6 +74,51 @@ export function CabinetApp() {
     setPassword("");
     setSelectedToken(payload.subscriptions[0]?.token || "");
   }
+
+  useEffect(() => {
+    if (!jwt || data) {
+      setRestoringSession(false);
+      return;
+    }
+
+    let cancelled = false;
+    async function restoreSession() {
+      setRestoringSession(true);
+      try {
+        const response = await fetch(`${getApiBase()}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${jwt}` }
+        });
+        if (response.status === 401 || response.status === 403) {
+          if (!cancelled) logout(true);
+          return;
+        }
+        if (!response.ok) throw new Error("Не удалось восстановить сессию");
+        if (!cancelled) applyAuthPayload((await response.json()) as AuthResponse);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Не удалось восстановить сессию");
+      } finally {
+        if (!cancelled) setRestoringSession(false);
+      }
+    }
+
+    void restoreSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [data, jwt]);
+
+  useEffect(() => {
+    if (!jwt || !data) return;
+    void loadTelegramStatus();
+  }, [data, jwt]);
+
+  useEffect(() => {
+    if (!jwt || !subscription) {
+      setDevices([]);
+      return;
+    }
+    void loadDevices(subscription.token);
+  }, [jwt, subscription?.token]);
 
   async function submitAccountAuth() {
     setLoading(true);
@@ -173,6 +232,76 @@ export function CabinetApp() {
     }
   }
 
+  async function loadTelegramStatus() {
+    if (!jwt) return;
+    const response = await fetch(`${getApiBase()}/api/cabinet/telegram/status`, {
+      headers: { Authorization: `Bearer ${jwt}` }
+    });
+    if (response.ok) {
+      const payload = (await response.json()) as { connected: boolean };
+      setTelegramConnected(payload.connected);
+    }
+  }
+
+  async function createTelegramLink() {
+    if (!jwt) return;
+    setError("");
+    const response = await fetch(`${getApiBase()}/api/cabinet/telegram/link-token`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${jwt}` }
+    });
+    if (response.status === 401 || response.status === 403) {
+      logout(true);
+      return;
+    }
+    if (!response.ok) {
+      setError("Не удалось создать ссылку Telegram");
+      return;
+    }
+    const payload = (await response.json()) as { telegram_link_url: string };
+    setTelegramLink(payload.telegram_link_url);
+  }
+
+  async function loadDevices(token: string) {
+    if (!jwt) return;
+    const response = await fetch(`${getApiBase()}/api/cabinet/subscription/${token}/devices`, {
+      headers: { Authorization: `Bearer ${jwt}` }
+    });
+    if (response.ok) {
+      const payload = (await response.json()) as { devices: Device[] };
+      setDevices(payload.devices);
+    }
+  }
+
+  async function addDevice() {
+    if (!jwt || !subscription || !deviceName.trim()) return;
+    setError("");
+    const response = await fetch(`${getApiBase()}/api/cabinet/subscription/${subscription.token}/devices`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+      body: JSON.stringify({ name: deviceName.trim(), type: deviceType })
+    });
+    if (response.status === 401 || response.status === 403) {
+      logout(true);
+      return;
+    }
+    if (!response.ok) {
+      setError(await readApiError(response, "Не удалось добавить устройство"));
+      return;
+    }
+    setDeviceName("");
+    await loadDevices(subscription.token);
+  }
+
+  async function deleteDevice(deviceId: string) {
+    if (!jwt || !subscription) return;
+    const response = await fetch(`${getApiBase()}/api/cabinet/subscription/${subscription.token}/devices/${deviceId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${jwt}` }
+    });
+    if (response.ok) await loadDevices(subscription.token);
+  }
+
   async function copyLink() {
     if (!subscription) return;
     await navigator.clipboard.writeText(subscription.public_subscription_url);
@@ -209,7 +338,13 @@ export function CabinetApp() {
           )}
         </header>
 
-        {!data ? (
+        {restoringSession && !data ? (
+          <div className="mx-auto mt-16 max-w-xl rounded-[28px] border border-white/[0.08] bg-[#101010] p-6 md:p-8">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff2b3a]">Arvexo Account</p>
+            <h1 className="mt-4 text-3xl font-semibold">Восстанавливаем сессию</h1>
+            <p className="mt-4 text-sm text-white/56">Загружаем данные кабинета.</p>
+          </div>
+        ) : !data ? (
           <div className="mx-auto mt-16 max-w-xl rounded-[28px] border border-white/[0.08] bg-[#101010] p-6 md:p-8">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff2b3a]">Arvexo Account</p>
             <h1 className="mt-4 text-4xl font-semibold">
@@ -337,6 +472,24 @@ export function CabinetApp() {
             </section>
 
             <aside className="grid gap-5">
+              <div className="rounded-[28px] border border-white/[0.08] bg-[#101010] p-6">
+                <h2 className="text-xl font-semibold">Telegram</h2>
+                <p className="mt-3 text-sm text-white/56">
+                  {telegramConnected ? "Telegram подключён." : "Подключите Telegram для управления подпиской и уведомлений."}
+                </p>
+                {!telegramConnected && (
+                  <>
+                    <button onClick={createTelegramLink} className="mt-4 min-h-11 rounded-lg bg-[#ef233c] px-4 text-sm font-bold">
+                      Подключить Telegram
+                    </button>
+                    {telegramLink && (
+                      <a href={telegramLink} className="mt-3 block break-all text-sm font-semibold text-[#ffb3bb]" target="_blank" rel="noreferrer">
+                        {telegramLink}
+                      </a>
+                    )}
+                  </>
+                )}
+              </div>
               {subscription && (
                 <div className="rounded-[28px] border border-white/[0.08] bg-[#101010] p-6">
                   <div className="flex items-center gap-3">
@@ -348,6 +501,44 @@ export function CabinetApp() {
                     className="mt-5 aspect-square w-full rounded-2xl bg-white p-4"
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=420x420&data=${encodeURIComponent(subscription.public_subscription_url)}`}
                   />
+                </div>
+              )}
+              {subscription && (
+                <div className="rounded-[28px] border border-white/[0.08] bg-[#101010] p-6">
+                  <h2 className="text-xl font-semibold">Устройства</h2>
+                  <p className="mt-2 text-sm text-white/48">{devices.length}/{subscription.device_limit}</p>
+                  <div className="mt-4 grid gap-2">
+                    {devices.map((device) => (
+                      <div key={device.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.08] bg-black/25 p-3">
+                        <div>
+                          <p className="text-sm font-bold">{device.name}</p>
+                          <p className="text-xs text-white/45">{device.type || "device"}</p>
+                        </div>
+                        <button onClick={() => deleteDevice(device.id)} className="rounded-lg border border-white/[0.1] px-3 py-2 text-xs font-bold">Удалить</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 grid gap-2">
+                    <input
+                      value={deviceName}
+                      onChange={(event) => setDeviceName(event.target.value)}
+                      placeholder="Название устройства"
+                      className="h-11 rounded-lg border border-white/[0.1] bg-black px-3 text-sm text-white outline-none focus:border-[#ef233c]"
+                    />
+                    <select
+                      value={deviceType}
+                      onChange={(event) => setDeviceType(event.target.value)}
+                      className="h-11 rounded-lg border border-white/[0.1] bg-black px-3 text-sm text-white outline-none focus:border-[#ef233c]"
+                    >
+                      <option value="phone">Телефон</option>
+                      <option value="laptop">Ноутбук</option>
+                      <option value="tablet">Планшет</option>
+                      <option value="other">Другое</option>
+                    </select>
+                    <button onClick={addDevice} disabled={!deviceName.trim() || devices.length >= subscription.device_limit} className="min-h-11 rounded-lg bg-white px-4 text-sm font-bold text-black disabled:opacity-50">
+                      Добавить устройство
+                    </button>
+                  </div>
                 </div>
               )}
               <div className="rounded-[28px] border border-white/[0.08] bg-[#101010] p-6">

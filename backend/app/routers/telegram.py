@@ -15,8 +15,10 @@ from app.schemas.telegram import (
     TelegramUpsertRequest,
     TelegramUpsertResponse,
 )
+from app.schemas.telegram_link import TelegramConsumeLinkRequest, TelegramConsumeLinkResponse
 from app.services.provisioning_service import provision_trial
 from app.services.subscription_service import require_telegram_owns_subscription, set_subscription_mode
+from app.services.telegram_link_service import consume_telegram_link_token
 from app.services.user_service import upsert_telegram_user
 from app.utils.security import require_bot_token
 
@@ -35,6 +37,21 @@ async def upsert_user(payload: TelegramUpsertRequest, session: AsyncSession = De
     )
     await session.commit()
     return TelegramUpsertResponse(ok=True, user_id=str(user.id), telegram_id=payload.telegram_id)
+
+
+@router.post("/link-token/consume", response_model=TelegramConsumeLinkResponse)
+async def consume_link_token(payload: TelegramConsumeLinkRequest, session: AsyncSession = Depends(get_db_session)):
+    user_id, telegram_id = await consume_telegram_link_token(
+        session=session,
+        plain_token=payload.token,
+        telegram_id=payload.telegram_id,
+        username=payload.username,
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        language_code=payload.language_code,
+    )
+    await session.commit()
+    return TelegramConsumeLinkResponse(ok=True, user_id=str(user_id), telegram_id=telegram_id)
 
 
 @router.get("/users/{telegram_id}/subscriptions", response_model=TelegramSubscriptionsResponse)

@@ -1,9 +1,13 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db_session
+from app.models.device import Device
+from app.models.telegram_account import TelegramAccount
 from app.schemas.billing import (
     CreateOrderRequest,
     CreateOrderResponse,
@@ -16,7 +20,9 @@ from app.schemas.billing import (
 )
 from app.schemas.cabinet import ChangeModeRequest, ChangeModeResponse
 from app.schemas.common import SubscriptionOut, subscription_to_out
+from app.schemas.devices import CreateDeviceRequest, CreateDeviceResponse, DeleteDeviceResponse, DevicesResponse, DeviceOut
 from app.schemas.promo import RedeemPromoCodeRequest, RedeemPromoCodeResponse
+from app.schemas.telegram_link import TelegramLinkTokenResponse, TelegramStatusResponse
 from app.services.billing_service import (
     create_order_for_user,
     list_active_plans,
@@ -32,6 +38,7 @@ from app.services.subscription_service import (
     require_subscription_by_token,
     set_subscription_mode,
 )
+from app.services.telegram_link_service import create_telegram_link_token
 from app.utils.security import require_cabinet_user_id
 
 router = APIRouter(prefix="/api/cabinet", tags=["cabinet"])
@@ -92,6 +99,79 @@ async def redeem_promo_code_endpoint(
     subscription = await redeem_promo_code(session, user_id, payload.code)
     await session.commit()
     return RedeemPromoCodeResponse(ok=True, subscription=subscription, message="Promo code redeemed. Subscription activated.")
+
+
+@router.get("/telegram/status", response_model=TelegramStatusResponse)
+async def get_telegram_status(
+    user_id: UUID = Depends(require_cabinet_user_id),
+    session: AsyncSession = Depends(get_db_session),
+):
+    result = await session.execute(select(TelegramAccount).where(TelegramAccount.user_id == user_id))
+    accounts = list(result.scalars().all())
+    return TelegramStatusResponse(connected=bool(accounts), telegram_ids=[account.telegram_id for account in accounts])
+
+
+@router.post("/telegram/link-token", response_model=TelegramLinkTokenResponse)
+async def create_telegram_link(
+    user_id: UUID = Depends(require_cabinet_user_id),
+    session: AsyncSession = Depends(get_db_session),
+):
+    token, plain = await create_telegram_link_token(session, user_id)
+    await session.commit()
+    bot_url = settings.telegram_bot_url.rstrip("/") if settings.telegram_bot_url else "https://t.me/ARVEXO_BOT"
+    return TelegramLinkTokenResponse(ok=True, telegram_link_url=f"{bot_url}?start={plain}", expires_at=token.expires_at.isoformat())
+
+
+@router.get("/subscription/{token}/devices", response_model=DevicesResponse)
+async def list_subscription_devices(
+    token: str,
+    user_id: UUID = Depends(require_cabinet_user_id),
+    session: AsyncSession = Depends(get_db_session),
+):
+    subscription = await require_subscription_by_token(session, token)
+    require_subscription_owner(subscription.user_id, user_id)
+    result = await session.execute(select(Device).where(Device.subscription_id == subscription.id).order_by(Device.created_at.desc()))
+    return DevicesResponse(devices=[DeviceOut.model_validate(device) for device in result.scalars().all()])
+
+
+@router.post("/subscription/{token}/devices", response_model=CreateDeviceResponse, status_code=status.HTTP_201_CREATED)
+async def create_subscription_device(
+    token: str,
+    payload: CreateDeviceRequest,
+    user_id: UUID = Depends(require_cabinet_user_id),
+    session: AsyncSession = Depends(get_db_session),
+):
+    subscription = await require_subscription_by_token(session, token)
+    require_subscription_owner(subscription.user_id, user_id)
+    count = int(
+        (await session.execute(
+            select(func.count()).select_from(Device).where(Device.subscription_id == subscription.id, Device.is_active.is_(True))
+        )).scalar_one()
+    )
+    if count >= subscription.device_limit:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Device limit reached")
+    device = Device(subscription_id=subscription.id, name=payload.name, type=payload.type)
+    session.add(device)
+    await session.commit()
+    await session.refresh(device)
+    return CreateDeviceResponse(ok=True, device=DeviceOut.model_validate(device))
+
+
+@router.delete("/subscription/{token}/devices/{device_id}", response_model=DeleteDeviceResponse)
+async def delete_subscription_device(
+    token: str,
+    device_id: UUID,
+    user_id: UUID = Depends(require_cabinet_user_id),
+    session: AsyncSession = Depends(get_db_session),
+):
+    subscription = await require_subscription_by_token(session, token)
+    require_subscription_owner(subscription.user_id, user_id)
+    device = await session.get(Device, device_id)
+    if device is None or device.subscription_id != subscription.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    await session.delete(device)
+    await session.commit()
+    return DeleteDeviceResponse(ok=True)
 
 
 @router.get("/subscription/{token}", response_model=SubscriptionOut)

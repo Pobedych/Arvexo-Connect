@@ -3,7 +3,7 @@ from io import BytesIO
 
 import qrcode
 from aiogram import Bot, Dispatcher, F
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.backend import BackendClient
@@ -87,7 +87,21 @@ async def main() -> None:
     dp = Dispatcher()
 
     @dp.message(CommandStart())
-    async def start(message: Message) -> None:
+    async def start(message: Message, command: CommandObject) -> None:
+        if command.args and command.args.startswith("link_"):
+            try:
+                await backend.consume_link_token(
+                    token=command.args,
+                    telegram_id=message.from_user.id,
+                    username=message.from_user.username,
+                    first_name=message.from_user.first_name,
+                    language_code=message.from_user.language_code,
+                )
+                await message.answer("Telegram подключён к вашему Arvexo Account.", reply_markup=main_menu())
+                return
+            except Exception:
+                await message.answer("Ссылка подключения недействительна или истекла.", reply_markup=main_menu())
+                return
         await backend.upsert_user(
             telegram_id=message.from_user.id,
             username=message.from_user.username,

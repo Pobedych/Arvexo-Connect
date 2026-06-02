@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     jwt_expires_minutes: int = 60
     crypto_payment_network: str = "TRC20"
     crypto_payment_address: str | None = None
+    telegram_bot_url: str = "https://t.me/ARVEXO_BOT"
 
     model_config = SettingsConfigDict(
         env_file=".env",

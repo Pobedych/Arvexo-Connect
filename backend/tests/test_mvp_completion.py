@@ -1,0 +1,141 @@
+import pytest
+import pytest_asyncio
+from fastapi import Response
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+
+from app.database import Base, get_db_session
+from app.enums import RoutingMode
+from app.main import app
+from app.services.subscription_service import create_subscription
+from app.services.user_service import create_user
+
+
+@pytest_asyncio.fixture
+async def session_factory():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    factory = async_sessionmaker(bind=engine, expire_on_commit=False)
+
+    async def override_db_session():
+        async with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_db_session
+    try:
+        yield factory
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+        await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def client(session_factory):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as test_client:
+        yield test_client
+
+
+async def create_user_subscription(session_factory, token: str = "ARVX-MVP-TEST"):
+    async with session_factory() as session:
+        user = await create_user(session, display_name="MVP")
+        subscription = await create_subscription(
+            session=session,
+            user_id=user.id,
+            original_sub_url="https://example.com/sub",
+            routing_mode=RoutingMode.SMART,
+            public_token=token,
+            device_limit=2,
+        )
+        await session.commit()
+        return user, subscription
+
+
+async def register(client: AsyncClient) -> str:
+    response = await client.post(
+        "/api/auth/register",
+        json={"email": "mvp-complete@example.com", "password": "strongpass123", "display_name": "MVP"},
+    )
+    assert response.status_code == 201
+    return response.json()["access_token"]
+
+
+@pytest.mark.asyncio
+async def test_public_subscription_html_and_raw(client, session_factory, monkeypatch):
+    await create_user_subscription(session_factory)
+
+    async def fake_proxy(session, subscription):
+        return Response(content="raw-subscription", media_type="text/plain")
+
+    monkeypatch.setattr("app.routers.public_subscription.proxy_subscription", fake_proxy)
+
+    html = await client.get("/u/ARVX-MVP-TEST", headers={"Accept": "text/html", "User-Agent": "Mozilla/5.0"})
+    raw = await client.get("/u/ARVX-MVP-TEST?format=raw", headers={"Accept": "text/html", "User-Agent": "Mozilla/5.0"})
+
+    assert html.status_code == 200
+    assert "Arvexo Connect Subscription" in html.text
+    assert "original_sub_url" not in html.text
+    assert raw.status_code == 200
+    assert raw.text == "raw-subscription"
+
+
+@pytest.mark.asyncio
+async def test_telegram_link_flow(client):
+    jwt = await register(client)
+    created = await client.post("/api/cabinet/telegram/link-token", headers={"Authorization": f"Bearer {jwt}"})
+    token = created.json()["telegram_link_url"].split("start=", 1)[1]
+
+    consumed = await client.post(
+        "/api/telegram/link-token/consume",
+        headers={"X-Bot-Token": "change_me_bot_token"},
+        json={"token": token, "telegram_id": 123456, "username": "family"},
+    )
+    status = await client.get("/api/cabinet/telegram/status", headers={"Authorization": f"Bearer {jwt}"})
+
+    assert consumed.status_code == 200
+    assert status.json()["connected"] is True
+    assert status.json()["telegram_ids"] == [123456]
+
+
+@pytest.mark.asyncio
+async def test_cabinet_devices_crud(client, session_factory):
+    user, subscription = await create_user_subscription(session_factory, token="ARVX-DEVICE-TEST")
+    token = await client.get("/api/auth/me", headers={"Authorization": "Bearer invalid"})
+    assert token.status_code == 401
+    jwt_response = await client.post(
+        "/api/auth/register",
+        json={"email": "devices@example.com", "password": "strongpass123", "display_name": "Devices"},
+    )
+    jwt = jwt_response.json()["access_token"]
+    async with session_factory() as session:
+        subscription.user_id = user.id
+    # Use an access key-free token by moving subscription to registered user.
+    async with session_factory() as session:
+        from sqlalchemy import select
+        from app.models.user import User
+        from app.models.vpn_subscription import VpnSubscription
+
+        registered = (await session.execute(select(User).where(User.email == "devices@example.com"))).scalar_one()
+        sub = (await session.execute(select(VpnSubscription).where(VpnSubscription.public_token == "ARVX-DEVICE-TEST"))).scalar_one()
+        sub.user_id = registered.id
+        await session.commit()
+
+    created = await client.post(
+        f"/api/cabinet/subscription/{subscription.public_token}/devices",
+        headers={"Authorization": f"Bearer {jwt}"},
+        json={"name": "iPhone", "type": "phone"},
+    )
+    listed = await client.get(f"/api/cabinet/subscription/{subscription.public_token}/devices", headers={"Authorization": f"Bearer {jwt}"})
+    device_id = listed.json()["devices"][0]["id"]
+    deleted = await client.delete(f"/api/cabinet/subscription/{subscription.public_token}/devices/{device_id}", headers={"Authorization": f"Bearer {jwt}"})
+
+    assert created.status_code == 201
+    assert listed.status_code == 200
+    assert listed.json()["devices"][0]["name"] == "iPhone"
+    assert deleted.status_code == 200

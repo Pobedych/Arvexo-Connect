@@ -254,7 +254,10 @@ Public subscription:
 
 ```bash
 curl http://127.0.0.1:8012/u/ARVX-XXXX-XXXX
+curl http://127.0.0.1:8012/u/ARVX-XXXX-XXXX?format=raw
 ```
+
+Browser requests to `/u/{token}` render a safe HTML page with status, plan, QR, instructions, and raw subscription link. VPN clients or `?format=raw` receive the upstream raw subscription body. `original_sub_url` is never exposed.
 
 Change mode:
 
@@ -267,6 +270,21 @@ curl -X POST http://127.0.0.1:8012/api/cabinet/subscription/ARVX-XXXX-XXXX/mode 
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"mode":"privacy"}'
+```
+
+Telegram link and devices:
+
+```bash
+curl -X POST http://127.0.0.1:8012/api/cabinet/telegram/link-token \
+  -H "Authorization: Bearer $TOKEN"
+
+curl http://127.0.0.1:8012/api/cabinet/subscription/ARVX-XXXX-XXXX/devices \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -X POST http://127.0.0.1:8012/api/cabinet/subscription/ARVX-XXXX-XXXX/devices \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"iPhone Alex","type":"phone"}'
 ```
 
 Telegram upsert:

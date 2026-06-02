@@ -10,7 +10,7 @@ from app.schemas.auth import AccessKeyRequest, AccessKeyResponse, AccountLoginRe
 from app.schemas.common import subscription_to_out
 from app.services.access_key_service import authenticate_access_key
 from app.services.user_service import authenticate_account_user, create_account_user, get_user_by_email
-from app.utils.security import create_access_token
+from app.utils.security import create_access_token, require_cabinet_user_id
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -50,6 +50,14 @@ async def authenticate_by_access_key(payload: AccessKeyRequest, session: AsyncSe
     user_id, subscriptions = authenticated
     await session.commit()
     return build_access_response(user_id, subscriptions)
+
+
+@router.get("/me", response_model=AccessKeyResponse)
+async def get_current_account(
+    user_id: UUID = Depends(require_cabinet_user_id),
+    session: AsyncSession = Depends(get_db_session),
+):
+    return await build_auth_response(session, str(user_id))
 
 
 async def build_auth_response(session: AsyncSession, user_id: str) -> AccessKeyResponse:
