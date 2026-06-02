@@ -52,7 +52,6 @@ export function CabinetApp() {
   }, [data, selectedToken]);
 
   function applyAuthPayload(payload: AuthResponse) {
-    // TODO: replace localStorage JWT storage with an httpOnly cookie session.
     localStorage.setItem(JWT_STORAGE_KEY, payload.access_token);
     setJwt(payload.access_token);
     setData(payload);
