@@ -31,6 +31,7 @@ class CreateUserWithSubscriptionResponse(BaseModel):
     ok: bool
     user: UserOut
     subscription: SubscriptionOut
+    access_key: str | None = None
 
 
 class DisableSubscriptionResponse(BaseModel):
@@ -57,3 +58,36 @@ class CreateSubscriptionResponse(BaseModel):
     ok: bool
     user_id: UUID
     subscription: SubscriptionOut
+
+
+class ProvisionSubscriptionRequest(BaseModel):
+    display_name: str | None = None
+    telegram_id: int | None = None
+    routing_mode: RoutingMode = RoutingMode.SMART
+    duration_days: int = Field(default=30, ge=1, le=3660)
+    device_limit: int = Field(default=3, ge=1)
+    traffic_limit_gb: int | None = Field(default=None, ge=1)
+    note: str | None = None
+
+
+class ProvisionSubscriptionResponse(BaseModel):
+    ok: bool
+    user: UserOut
+    subscription: SubscriptionOut
+    access_key: str
+
+
+class AdminChangeOriginalSubUrlRequest(BaseModel):
+    original_sub_url: HttpUrl
+
+
+class AdminChangeModeRequest(BaseModel):
+    mode: RoutingMode
+
+
+class AdminUserListResponse(BaseModel):
+    users: list[UserOut]
+
+
+class AdminSubscriptionListResponse(BaseModel):
+    subscriptions: list[SubscriptionOut]

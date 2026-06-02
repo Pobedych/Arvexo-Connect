@@ -37,5 +37,5 @@ def subscription_to_out(subscription: VpnSubscription) -> SubscriptionOut:
         device_limit=subscription.device_limit,
         traffic_limit_gb=subscription.traffic_limit_gb,
         last_access_at=subscription.last_access_at,
-        public_subscription_url=f"{settings.public_base_url.rstrip('/')}/u/{subscription.public_token}",
+        public_subscription_url=f"{settings.public_sub_base_url.rstrip('/')}/u/{subscription.public_token}",
     )

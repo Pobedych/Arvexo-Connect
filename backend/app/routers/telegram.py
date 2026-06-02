@@ -10,9 +10,12 @@ from app.schemas.telegram import (
     TelegramChangeModeRequest,
     TelegramChangeModeResponse,
     TelegramSubscriptionsResponse,
+    TelegramTrialProvisionRequest,
+    TelegramTrialProvisionResponse,
     TelegramUpsertRequest,
     TelegramUpsertResponse,
 )
+from app.services.provisioning_service import provision_trial
 from app.services.subscription_service import require_telegram_owns_subscription, set_subscription_mode
 from app.services.user_service import upsert_telegram_user
 from app.utils.security import require_bot_token
@@ -62,3 +65,19 @@ async def change_telegram_subscription_mode(
         routing_mode=subscription.routing_mode,
         message="Mode updated. Ask user to refresh subscription in VPN app.",
     )
+
+
+@router.post("/provision-trial", response_model=TelegramTrialProvisionResponse)
+async def provision_telegram_trial(
+    payload: TelegramTrialProvisionRequest,
+    session: AsyncSession = Depends(get_db_session),
+):
+    result = await provision_trial(
+        session=session,
+        telegram_id=payload.telegram_id,
+        username=payload.username,
+        first_name=payload.first_name,
+        duration_hours=payload.duration_hours,
+    )
+    await session.commit()
+    return TelegramTrialProvisionResponse(ok=True, subscription=result.subscription)

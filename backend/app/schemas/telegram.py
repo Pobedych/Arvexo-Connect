@@ -32,3 +32,15 @@ class TelegramChangeModeResponse(BaseModel):
     ok: bool
     routing_mode: str
     message: str
+
+
+class TelegramTrialProvisionRequest(BaseModel):
+    telegram_id: int
+    username: str | None = None
+    first_name: str | None = None
+    duration_hours: int = 24
+
+
+class TelegramTrialProvisionResponse(BaseModel):
+    ok: bool
+    subscription: SubscriptionOut

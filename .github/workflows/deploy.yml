@@ -57,6 +57,14 @@ jobs:
         working-directory: backend
         run: python -m compileall app scripts
 
+      - name: Install bot dependencies
+        working-directory: bot
+        run: pip install -r requirements.txt
+
+      - name: Validate bot imports
+        working-directory: bot
+        run: python -m compileall app
+
       - name: Validate deploy secrets
         run: |
           clean_secret() {
@@ -111,6 +119,7 @@ jobs:
             --exclude "frontend/.env" \
             --exclude "frontend/.env.*" \
             --exclude "backend/.env" \
+            --exclude "bot/.env" \
             -e "ssh -p $DEPLOY_PORT" \
             ./ "$DEPLOY_USERNAME@$DEPLOY_HOST:$DEPLOY_TARGET_PATH/"
 

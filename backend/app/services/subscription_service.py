@@ -42,27 +42,39 @@ async def create_subscription(
     device_limit: int = 3,
     traffic_limit_gb: int | None = None,
     note: str | None = None,
+    public_token: str | None = None,
+    status_value: SubscriptionStatus = SubscriptionStatus.ACTIVE,
+    xui_client_uuid: str | None = None,
+    xui_client_email: str | None = None,
+    xui_sub_id: str | None = None,
+    xui_inbound_ids: list[int] | None = None,
 ) -> VpnSubscription:
-    for _ in range(8):
-        token = generate_public_token()
-        exists = await get_subscription_by_token(session, token)
-        if exists is None:
-            break
-    else:
-        raise RuntimeError("Failed to generate unique public token")
+    if public_token is None:
+        for _ in range(8):
+            public_token = generate_public_token()
+            exists = await get_subscription_by_token(session, public_token)
+            if exists is None:
+                break
+        else:
+            raise RuntimeError("Failed to generate unique public token")
 
     subscription = VpnSubscription(
         user_id=user_id,
-        public_token=token,
+        public_token=public_token,
         routing_mode=routing_mode.value,
+        status=status_value.value,
         original_sub_url=original_sub_url,
+        xui_client_uuid=xui_client_uuid,
+        xui_client_email=xui_client_email,
+        xui_sub_id=xui_sub_id,
+        xui_inbound_ids=xui_inbound_ids,
         expires_at=expires_at,
         device_limit=device_limit,
         traffic_limit_gb=traffic_limit_gb,
         note=note,
     )
     session.add(subscription)
-    await write_audit_log(session, "admin_created_subscription", user_id=user_id, metadata={"token_prefix": token[:9]})
+    await write_audit_log(session, "subscription_created", user_id=user_id, metadata={"token_prefix": public_token[:9]})
     return subscription
 
 

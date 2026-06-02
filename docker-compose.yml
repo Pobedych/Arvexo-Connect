@@ -28,6 +28,19 @@ services:
     depends_on:
       - postgres
 
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    container_name: arvexo-connect-bot
+    restart: unless-stopped
+    env_file:
+      - ./bot/.env
+    depends_on:
+      - backend
+    profiles:
+      - bot
+
   postgres:
     image: postgres:16-alpine
     container_name: arvexo-connect-postgres
