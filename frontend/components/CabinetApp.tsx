@@ -260,6 +260,7 @@ export function CabinetApp() {
     }
     const payload = (await response.json()) as { telegram_link_url: string };
     setTelegramLink(payload.telegram_link_url);
+    window.location.assign(payload.telegram_link_url);
   }
 
   async function unlinkTelegram() {
