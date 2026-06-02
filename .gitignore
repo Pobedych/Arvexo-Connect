@@ -20,5 +20,4 @@ bot/.env.prod
 bot/.venv
 bot/**/__pycache__
 bot/**/*.pyc
-/.idea/vcs.xml
-/.idea/inspectionProfiles/Project_Default.xml
+.idea

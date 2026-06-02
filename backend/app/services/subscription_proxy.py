@@ -1,3 +1,5 @@
+import base64
+
 import httpx
 from fastapi import HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +15,24 @@ NO_CACHE_HEADERS = {
     "Pragma": "no-cache",
     "Expires": "0",
 }
+
+
+def build_subscription_headers(subscription: VpnSubscription) -> dict[str, str]:
+    headers = dict(NO_CACHE_HEADERS)
+    upload_bytes = 0
+    download_bytes = 0
+    total_bytes = int(subscription.traffic_limit_gb * 1024 * 1024 * 1024) if subscription.traffic_limit_gb else 0
+    expire_at = int(subscription.expires_at.timestamp()) if subscription.expires_at else 0
+    title = base64.b64encode("Arvexo Connect".encode("utf-8")).decode("ascii")
+
+    headers["Subscription-Userinfo"] = (
+        f"upload={upload_bytes}; download={download_bytes}; total={total_bytes}; expire={expire_at}"
+    )
+    headers["Profile-Update-Interval"] = "1"
+    headers["Profile-Title"] = f"base64:{title}"
+    headers["Support-Url"] = settings.public_frontend_url.rstrip("/")
+    headers["Profile-Web-Page-Url"] = settings.public_frontend_url.rstrip("/")
+    return headers
 
 
 async def proxy_subscription(session: AsyncSession, subscription: VpnSubscription) -> Response:
@@ -44,4 +64,4 @@ async def proxy_subscription(session: AsyncSession, subscription: VpnSubscriptio
         metadata={"token_prefix": subscription.public_token[:9]},
     )
     content_type = upstream.headers.get("content-type", "text/plain; charset=utf-8")
-    return Response(content=upstream.content, media_type=content_type, headers=NO_CACHE_HEADERS)
+    return Response(content=upstream.content, media_type=content_type, headers=build_subscription_headers(subscription))
