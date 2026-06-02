@@ -106,8 +106,109 @@ async def test_raw_subscription_access_records_real_device(client, session_facto
 
         devices = list((await session.execute(select(Device))).scalars().all())
         assert len(devices) == 1
-        assert devices[0].name == "Happ"
+        assert devices[0].name == "Happ iPhone"
         assert devices[0].source == "raw_subscription"
+
+
+@pytest.mark.asyncio
+async def test_raw_subscription_access_detects_android_model(client, session_factory, monkeypatch):
+    await create_user_subscription(session_factory, token="ARVX-SAMSUNG-DEVICE")
+
+    async def fake_proxy(session, subscription):
+        return Response(content="raw-subscription", media_type="text/plain")
+
+    monkeypatch.setattr("app.routers.public_subscription.proxy_subscription", fake_proxy)
+
+    response = await client.get(
+        "/u/ARVX-SAMSUNG-DEVICE?format=raw",
+        headers={"User-Agent": "V2RayTun/1.0 (Linux; Android 14; SM-S921B Build/UP1A.231005.007)"},
+    )
+
+    assert response.status_code == 200
+    async with session_factory() as session:
+        from sqlalchemy import select
+        from app.models.device import Device
+
+        devices = list((await session.execute(select(Device))).scalars().all())
+        assert len(devices) == 1
+        assert devices[0].name == "samsung SM-S921B"
+        assert devices[0].type == "phone"
+
+
+@pytest.mark.asyncio
+async def test_raw_subscription_access_deduplicates_generic_client(client, session_factory, monkeypatch):
+    await create_user_subscription(session_factory, token="ARVX-GENERIC-DEVICE")
+
+    async def fake_proxy(session, subscription):
+        return Response(content="raw-subscription", media_type="text/plain")
+
+    monkeypatch.setattr("app.routers.public_subscription.proxy_subscription", fake_proxy)
+
+    first = await client.get(
+        "/u/ARVX-GENERIC-DEVICE?format=raw",
+        headers={"User-Agent": "v2raytun/android", "X-Forwarded-For": "203.0.113.10"},
+    )
+    second = await client.get(
+        "/u/ARVX-GENERIC-DEVICE?format=raw",
+        headers={"User-Agent": "v2raytun/android", "X-Forwarded-For": "203.0.113.11"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    async with session_factory() as session:
+        from sqlalchemy import select
+        from app.models.device import Device
+
+        devices = list((await session.execute(select(Device))).scalars().all())
+        assert len(devices) == 1
+        assert devices[0].name == "V2RayTun Android"
+
+
+@pytest.mark.asyncio
+async def test_raw_subscription_access_reuses_legacy_ip_fingerprinted_device(client, session_factory, monkeypatch):
+    _, subscription = await create_user_subscription(session_factory, token="ARVX-LEGACY-DEVICE")
+    async with session_factory() as session:
+        from app.models.device import Device
+
+        session.add_all(
+            [
+                Device(
+                    subscription_id=subscription.id,
+                    name="V2RayTun",
+                    type="phone",
+                    source="raw_subscription",
+                    fingerprint_hash="legacy-ip-fingerprint-1",
+                    user_agent="v2raytun/android",
+                ),
+                Device(
+                    subscription_id=subscription.id,
+                    name="V2RayTun",
+                    type="phone",
+                    source="raw_subscription",
+                    fingerprint_hash="legacy-ip-fingerprint-2",
+                    user_agent="v2raytun/android",
+                ),
+            ]
+        )
+        await session.commit()
+
+    async def fake_proxy(session, subscription):
+        return Response(content="raw-subscription", media_type="text/plain")
+
+    monkeypatch.setattr("app.routers.public_subscription.proxy_subscription", fake_proxy)
+
+    response = await client.get("/u/ARVX-LEGACY-DEVICE?format=raw", headers={"User-Agent": "v2raytun/android"})
+
+    assert response.status_code == 200
+    async with session_factory() as session:
+        from sqlalchemy import select
+        from app.models.device import Device
+
+        devices = list((await session.execute(select(Device))).scalars().all())
+        active_devices = [device for device in devices if device.is_active]
+        assert len(devices) == 2
+        assert len(active_devices) == 1
+        assert active_devices[0].name == "V2RayTun Android"
 
 
 @pytest.mark.asyncio

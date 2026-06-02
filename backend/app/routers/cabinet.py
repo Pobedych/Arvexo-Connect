@@ -140,7 +140,9 @@ async def list_subscription_devices(
 ):
     subscription = await require_subscription_by_token(session, token)
     require_subscription_owner(subscription.user_id, user_id)
-    result = await session.execute(select(Device).where(Device.subscription_id == subscription.id).order_by(Device.created_at.desc()))
+    result = await session.execute(
+        select(Device).where(Device.subscription_id == subscription.id, Device.is_active.is_(True)).order_by(Device.created_at.desc())
+    )
     return DevicesResponse(devices=[DeviceOut.model_validate(device) for device in result.scalars().all()])
 
 
