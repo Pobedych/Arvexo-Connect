@@ -288,7 +288,7 @@ function Header({
             Войти
           </a>
           <a
-            href="#pricing"
+            href="/cabinet/login"
             className="rounded-lg bg-[#ef233c] px-5 py-3 text-sm font-semibold text-white shadow-[0_0_34px_rgba(239,35,60,0.32)] transition hover:-translate-y-0.5 hover:bg-[#ff2b3a]"
           >
             Получить доступ
@@ -326,7 +326,7 @@ function Header({
             Войти в кабинет
           </a>
           <a
-            href="#pricing"
+            href="/cabinet/login"
             className="rounded-lg bg-[#ef233c] px-4 py-3 text-center text-sm font-semibold text-white"
             onClick={() => setMenuOpen(false)}
           >
@@ -358,7 +358,7 @@ function Hero() {
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <a
-              href="#pricing"
+              href="/cabinet/login"
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-[#ef233c] px-6 text-sm font-bold text-white shadow-[0_0_42px_rgba(239,35,60,0.34)] transition hover:-translate-y-0.5 hover:bg-[#ff2b3a]"
             >
               Получить доступ <ArrowRight className="h-4 w-4" />
@@ -892,7 +892,7 @@ function RouteControl() {
               ))}
             </div>
             <a
-              href="#pricing"
+              href="/cabinet/login"
               className="mt-8 inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/[0.1] px-4 text-sm font-bold text-white transition hover:border-[#ef233c]/45 hover:bg-[#ef233c]/10"
             >
               Выбрать режим <ArrowRight className="h-4 w-4" />
@@ -1114,7 +1114,7 @@ function FinalCTA() {
           сетей.
         </p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-          <a href="#pricing" className="inline-flex min-h-12 items-center justify-center rounded-lg bg-[#ef233c] px-6 text-sm font-bold text-white">
+          <a href="/cabinet/login" className="inline-flex min-h-12 items-center justify-center rounded-lg bg-[#ef233c] px-6 text-sm font-bold text-white">
             Получить Arvexo Connect
           </a>
           <a
