@@ -38,8 +38,6 @@ services:
       - ./bot/.env
     depends_on:
       - backend
-    profiles:
-      - bot
 
   postgres:
     image: postgres:16-alpine
