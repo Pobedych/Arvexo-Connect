@@ -68,7 +68,7 @@ async def register(client: AsyncClient) -> str:
 
 @pytest.mark.asyncio
 async def test_public_subscription_html_and_raw(client, session_factory, monkeypatch):
-    await create_user_subscription(session_factory)
+    user, _ = await create_user_subscription(session_factory)
 
     async def fake_proxy(session, subscription):
         return Response(content="raw-subscription", media_type="text/plain")
@@ -83,6 +83,31 @@ async def test_public_subscription_html_and_raw(client, session_factory, monkeyp
     assert "original_sub_url" not in html.text
     assert raw.status_code == 200
     assert raw.text == "raw-subscription"
+
+
+@pytest.mark.asyncio
+async def test_raw_subscription_access_records_real_device(client, session_factory, monkeypatch):
+    await create_user_subscription(session_factory, token="ARVX-REAL-DEVICE")
+
+    async def fake_proxy(session, subscription):
+        return Response(content="raw-subscription", media_type="text/plain")
+
+    monkeypatch.setattr("app.routers.public_subscription.proxy_subscription", fake_proxy)
+
+    response = await client.get(
+        "/u/ARVX-REAL-DEVICE?format=raw",
+        headers={"User-Agent": "Happ/1.0 iPhone", "X-Forwarded-For": "203.0.113.10"},
+    )
+
+    assert response.status_code == 200
+    async with session_factory() as session:
+        from sqlalchemy import select
+        from app.models.device import Device
+
+        devices = list((await session.execute(select(Device))).scalars().all())
+        assert len(devices) == 1
+        assert devices[0].name == "Happ"
+        assert devices[0].source == "raw_subscription"
 
 
 @pytest.mark.asyncio

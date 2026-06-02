@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db_session
 from app.config import settings
 from app.models.vpn_subscription import VpnSubscription
+from app.services.device_service import record_raw_subscription_device
 from app.services.subscription_proxy import build_subscription_headers, proxy_subscription
 from app.services.subscription_service import ensure_subscription_accessible, require_subscription_by_token
 
@@ -25,6 +26,7 @@ async def get_public_subscription(
     subscription = await require_public_subscription(session, token)
     ensure_subscription_accessible(subscription)
     if format == "raw" or not wants_html(request):
+        await record_raw_subscription_device(session, subscription, request)
         response = await proxy_subscription(session, subscription)
         await session.commit()
         return response

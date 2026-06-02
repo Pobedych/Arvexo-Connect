@@ -29,6 +29,9 @@ type Device = {
   name: string | null;
   type: string | null;
   is_active: boolean;
+  source: string | null;
+  user_agent: string | null;
+  last_seen_at: string | null;
   created_at: string;
 };
 
@@ -538,7 +541,10 @@ export function CabinetApp() {
                       <div key={device.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.08] bg-black/25 p-3">
                         <div>
                           <p className="text-sm font-bold">{device.name}</p>
-                          <p className="text-xs text-white/45">{device.type || "device"}</p>
+                          <p className="text-xs text-white/45">
+                            {device.type || "device"}{device.last_seen_at ? ` · ${new Date(device.last_seen_at).toLocaleString()}` : ""}
+                          </p>
+                          {device.user_agent && <p className="mt-1 max-w-[280px] truncate text-xs text-white/35">{device.user_agent}</p>}
                         </div>
                         <button onClick={() => deleteDevice(device.id)} className="rounded-lg border border-white/[0.1] px-3 py-2 text-xs font-bold">Удалить</button>
                       </div>

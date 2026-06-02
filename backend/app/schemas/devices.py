@@ -9,6 +9,9 @@ class DeviceOut(BaseModel):
     name: str | None
     type: str | None
     is_active: bool
+    source: str | None
+    user_agent: str | None
+    last_seen_at: datetime | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

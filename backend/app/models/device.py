@@ -1,7 +1,8 @@
 import uuid
+from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -19,5 +20,9 @@ class Device(TimestampMixin, Base):
     name: Mapped[Optional[str]] = mapped_column(Text)
     type: Mapped[Optional[str]] = mapped_column(String(64))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    source: Mapped[Optional[str]] = mapped_column(String(64))
+    fingerprint_hash: Mapped[Optional[str]] = mapped_column(String(128), index=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(Text)
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     subscription: Mapped["VpnSubscription"] = relationship(back_populates="devices")
