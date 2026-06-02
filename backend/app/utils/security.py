@@ -36,11 +36,15 @@ def verify_access_key(access_key: str, stored_hash: str) -> bool:
     return hmac.compare_digest(candidate.hex(), digest)
 
 
+def constant_time_equal(left: str, right: str) -> bool:
+    return hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
+
+
 async def require_admin_token(x_admin_token: str | None = Header(default=None)) -> None:
-    if not x_admin_token or not hmac.compare_digest(x_admin_token, settings.admin_token):
+    if not x_admin_token or not constant_time_equal(x_admin_token, settings.admin_token):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin token")
 
 
 async def require_bot_token(x_bot_token: str | None = Header(default=None)) -> None:
-    if not x_bot_token or not hmac.compare_digest(x_bot_token, settings.bot_internal_token):
+    if not x_bot_token or not constant_time_equal(x_bot_token, settings.bot_internal_token):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bot token")
