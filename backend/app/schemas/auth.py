@@ -10,4 +10,6 @@ class AccessKeyRequest(BaseModel):
 class AccessKeyResponse(BaseModel):
     ok: bool
     user_id: str
+    access_token: str
+    token_type: str = "bearer"
     subscriptions: list[SubscriptionOut]

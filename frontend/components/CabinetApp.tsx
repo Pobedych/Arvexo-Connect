@@ -19,6 +19,8 @@ type Subscription = {
 type AuthResponse = {
   ok: boolean;
   user_id: string;
+  access_token: string;
+  token_type: "bearer";
   subscriptions: Subscription[];
 };
 
@@ -28,8 +30,11 @@ const modes = [
   { value: "global", title: "Global", text: "Для поездок и нестабильных сетей." }
 ];
 
+const JWT_STORAGE_KEY = "arvexo_cabinet_jwt";
+
 export function CabinetApp() {
-  const [accessKey, setAccessKey] = useState(() => (typeof window === "undefined" ? "" : localStorage.getItem("arvexo_access_key") || ""));
+  const [accessKey, setAccessKey] = useState("");
+  const [jwt, setJwt] = useState(() => (typeof window === "undefined" ? "" : localStorage.getItem(JWT_STORAGE_KEY) || ""));
   const [data, setData] = useState<AuthResponse | null>(null);
   const [selectedToken, setSelectedToken] = useState<string>("");
   const [message, setMessage] = useState("");
@@ -53,8 +58,11 @@ export function CabinetApp() {
       });
       if (!response.ok) throw new Error("Access key не найден");
       const payload = (await response.json()) as AuthResponse;
-      localStorage.setItem("arvexo_access_key", accessKey.trim());
+      // TODO: replace localStorage JWT storage with an httpOnly cookie session.
+      localStorage.setItem(JWT_STORAGE_KEY, payload.access_token);
+      setJwt(payload.access_token);
       setData(payload);
+      setAccessKey("");
       setSelectedToken(payload.subscriptions[0]?.token || "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось войти");
@@ -64,16 +72,20 @@ export function CabinetApp() {
   }
 
   async function changeMode(mode: string) {
-    if (!subscription) return;
+    if (!subscription || !jwt) return;
     setLoading(true);
     setError("");
     setMessage("");
     try {
       const response = await fetch(`${getApiBase()}/api/cabinet/subscription/${subscription.token}/mode`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
         body: JSON.stringify({ mode })
       });
+      if (response.status === 401 || response.status === 403) {
+        logout(true);
+        return;
+      }
       if (!response.ok) throw new Error("Не удалось изменить режим");
       setData((current) => {
         if (!current) return current;
@@ -98,11 +110,15 @@ export function CabinetApp() {
     setMessage("Ссылка скопирована.");
   }
 
-  function logout() {
-    localStorage.removeItem("arvexo_access_key");
+  function logout(redirectToLogin = false) {
+    localStorage.removeItem(JWT_STORAGE_KEY);
     setData(null);
     setAccessKey("");
+    setJwt("");
     setSelectedToken("");
+    if (redirectToLogin && typeof window !== "undefined") {
+      window.location.assign("/cabinet/login");
+    }
   }
 
   return (
@@ -116,7 +132,7 @@ export function CabinetApp() {
             Arvexo Connect
           </Link>
           {data && (
-            <button onClick={logout} className="inline-flex items-center gap-2 rounded-lg border border-white/[0.1] px-4 py-2 text-sm font-bold">
+            <button onClick={() => logout()} className="inline-flex items-center gap-2 rounded-lg border border-white/[0.1] px-4 py-2 text-sm font-bold">
               <LogOut className="h-4 w-4" /> Выйти
             </button>
           )}

@@ -66,6 +66,8 @@ PUBLIC_API_BASE_URL=https://api.arvexo.ru
 PUBLIC_FRONTEND_BASE_URL=https://connect.arvexo.ru
 ADMIN_TOKEN=strong_secret
 BOT_INTERNAL_TOKEN=strong_secret
+JWT_SECRET=strong_secret
+JWT_EXPIRES_MINUTES=60
 XUI_API_TOKEN=token_from_3x_ui
 XUI_BASE_URL=https://monitor.vpn.arvexo.ru:32145/Lb9BYg8zvNRCZMPeon
 XUI_SUB_BASE_URL=https://monitor.vpn.arvexo.ru:2096
@@ -138,7 +140,13 @@ Frontend routes:
 /instructions/windows
 ```
 
-The cabinet logs in with an access key, shows subscription status, QR code, copy button, instructions, and routing mode selector.
+The cabinet logs in with an access key and receives a JWT access token. Cabinet subscription status and mode changes require:
+
+```txt
+Authorization: Bearer <access_token>
+```
+
+The cabinet shows subscription status, QR code, copy button, instructions, and routing mode selector. The frontend stores the JWT in `localStorage` for MVP only; replace it with an httpOnly cookie session before a hardened production release.
 
 For browser calls set:
 
@@ -198,8 +206,13 @@ curl http://127.0.0.1:8012/u/ARVX-XXXX-XXXX
 Change mode:
 
 ```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8012/api/auth/access-key \
+  -H "Content-Type: application/json" \
+  -d '{"access_key":"ARVX-XXXX-XXXX-XXXX"}' | jq -r .access_token)
+
 curl -X POST http://127.0.0.1:8012/api/cabinet/subscription/ARVX-XXXX-XXXX/mode \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"mode":"privacy"}'
 ```
 

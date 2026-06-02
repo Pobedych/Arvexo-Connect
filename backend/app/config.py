@@ -20,11 +20,17 @@ class Settings(BaseSettings):
     xui_ssl_verify: bool = False
     xui_request_timeout: int = 15
     xui_default_inbound_ids: str = "1,2,3,4,6"
+    jwt_secret: str | None = None
+    jwt_expires_minutes: int = 60
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
     )
+
+    def model_post_init(self, __context) -> None:
+        if self.app_env == "production" and not self.jwt_secret:
+            raise ValueError("JWT_SECRET must be set in production")
 
     @property
     def cors_origins_list(self) -> list[str]:

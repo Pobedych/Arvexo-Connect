@@ -5,6 +5,7 @@ from app.database import get_db_session
 from app.schemas.auth import AccessKeyRequest, AccessKeyResponse
 from app.schemas.common import subscription_to_out
 from app.services.access_key_service import authenticate_access_key
+from app.utils.security import create_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -20,5 +21,6 @@ async def authenticate_by_access_key(payload: AccessKeyRequest, session: AsyncSe
     return AccessKeyResponse(
         ok=True,
         user_id=user_id,
+        access_token=create_access_token(user_id),
         subscriptions=[subscription_to_out(subscription) for subscription in subscriptions],
     )
