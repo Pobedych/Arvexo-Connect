@@ -78,3 +78,17 @@ async def consume_telegram_link_token(
         return token.user_id, telegram_id
 
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid or expired link token")
+
+
+async def unlink_telegram_accounts(session: AsyncSession, user_id: UUID) -> int:
+    result = await session.execute(select(TelegramAccount).where(TelegramAccount.user_id == user_id))
+    accounts = list(result.scalars().all())
+    for account in accounts:
+        await session.delete(account)
+
+    token_result = await session.execute(select(TelegramLinkToken).where(TelegramLinkToken.user_id == user_id))
+    for token in token_result.scalars().all():
+        await session.delete(token)
+
+    await write_audit_log(session, "telegram_unlinked", user_id=user_id, metadata={"removed": len(accounts)})
+    return len(accounts)

@@ -262,6 +262,26 @@ export function CabinetApp() {
     setTelegramLink(payload.telegram_link_url);
   }
 
+  async function unlinkTelegram() {
+    if (!jwt) return;
+    setError("");
+    const response = await fetch(`${getApiBase()}/api/cabinet/telegram/link`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${jwt}` }
+    });
+    if (response.status === 401 || response.status === 403) {
+      logout(true);
+      return;
+    }
+    if (!response.ok) {
+      setError("Не удалось отвязать Telegram");
+      return;
+    }
+    setTelegramConnected(false);
+    setTelegramLink("");
+    setMessage("Telegram отвязан. Можно подключить новый аккаунт.");
+  }
+
   async function loadDevices(token: string) {
     if (!jwt) return;
     const response = await fetch(`${getApiBase()}/api/cabinet/subscription/${token}/devices`, {
@@ -477,6 +497,11 @@ export function CabinetApp() {
                 <p className="mt-3 text-sm text-white/56">
                   {telegramConnected ? "Telegram подключён." : "Подключите Telegram для управления подпиской и уведомлений."}
                 </p>
+                {telegramConnected && (
+                  <button onClick={unlinkTelegram} className="mt-4 min-h-11 rounded-lg border border-white/[0.12] px-4 text-sm font-bold">
+                    Отвязать Telegram
+                  </button>
+                )}
                 {!telegramConnected && (
                   <>
                     <button onClick={createTelegramLink} className="mt-4 min-h-11 rounded-lg bg-[#ef233c] px-4 text-sm font-bold">

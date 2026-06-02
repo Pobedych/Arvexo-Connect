@@ -25,3 +25,8 @@ class TelegramConsumeLinkResponse(BaseModel):
     ok: bool
     user_id: str
     telegram_id: int
+
+
+class TelegramUnlinkResponse(BaseModel):
+    ok: bool
+    removed: int

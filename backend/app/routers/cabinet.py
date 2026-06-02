@@ -22,7 +22,7 @@ from app.schemas.cabinet import ChangeModeRequest, ChangeModeResponse
 from app.schemas.common import SubscriptionOut, subscription_to_out
 from app.schemas.devices import CreateDeviceRequest, CreateDeviceResponse, DeleteDeviceResponse, DevicesResponse, DeviceOut
 from app.schemas.promo import RedeemPromoCodeRequest, RedeemPromoCodeResponse
-from app.schemas.telegram_link import TelegramLinkTokenResponse, TelegramStatusResponse
+from app.schemas.telegram_link import TelegramLinkTokenResponse, TelegramStatusResponse, TelegramUnlinkResponse
 from app.services.billing_service import (
     create_order_for_user,
     list_active_plans,
@@ -38,7 +38,7 @@ from app.services.subscription_service import (
     require_subscription_by_token,
     set_subscription_mode,
 )
-from app.services.telegram_link_service import create_telegram_link_token
+from app.services.telegram_link_service import create_telegram_link_token, unlink_telegram_accounts
 from app.utils.security import require_cabinet_user_id
 
 router = APIRouter(prefix="/api/cabinet", tags=["cabinet"])
@@ -120,6 +120,16 @@ async def create_telegram_link(
     await session.commit()
     bot_url = settings.telegram_bot_url.rstrip("/") if settings.telegram_bot_url else "https://t.me/ARVEXO_BOT"
     return TelegramLinkTokenResponse(ok=True, telegram_link_url=f"{bot_url}?start={plain}", expires_at=token.expires_at.isoformat())
+
+
+@router.delete("/telegram/link", response_model=TelegramUnlinkResponse)
+async def unlink_telegram(
+    user_id: UUID = Depends(require_cabinet_user_id),
+    session: AsyncSession = Depends(get_db_session),
+):
+    removed = await unlink_telegram_accounts(session, user_id)
+    await session.commit()
+    return TelegramUnlinkResponse(ok=True, removed=removed)
 
 
 @router.get("/subscription/{token}/devices", response_model=DevicesResponse)

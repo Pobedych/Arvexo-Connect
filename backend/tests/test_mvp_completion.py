@@ -102,6 +102,13 @@ async def test_telegram_link_flow(client):
     assert status.json()["connected"] is True
     assert status.json()["telegram_ids"] == [123456]
 
+    unlinked = await client.delete("/api/cabinet/telegram/link", headers={"Authorization": f"Bearer {jwt}"})
+    status_after = await client.get("/api/cabinet/telegram/status", headers={"Authorization": f"Bearer {jwt}"})
+
+    assert unlinked.status_code == 200
+    assert unlinked.json()["removed"] == 1
+    assert status_after.json()["connected"] is False
+
 
 @pytest.mark.asyncio
 async def test_cabinet_devices_crud(client, session_factory):

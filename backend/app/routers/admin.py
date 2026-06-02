@@ -37,6 +37,7 @@ from app.models.vpn_subscription import VpnSubscription
 from app.services.billing_service import load_order_for_output, order_to_out, require_order
 from app.services.provisioning_service import provision_subscription, provision_subscription_for_user
 from app.services.promo_service import create_promo_code, list_promo_codes, promo_code_to_out
+from app.services.telegram_link_service import unlink_telegram_accounts
 from app.services.subscription_service import get_subscription_by_token
 from app.services.subscription_service import (
     create_subscription,
@@ -48,6 +49,7 @@ from app.services.subscription_service import (
 from app.services.user_service import create_user, upsert_telegram_user
 from app.utils.security import require_admin_token
 from app.utils.time import utc_now
+from app.schemas.telegram_link import TelegramUnlinkResponse
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin_token)])
 
@@ -119,6 +121,16 @@ async def provision_subscription_endpoint(
 async def list_users(session: AsyncSession = Depends(get_db_session)):
     result = await session.execute(select(User).order_by(User.created_at.desc()))
     return AdminUserListResponse(users=[UserOut.model_validate(user) for user in result.scalars().all()])
+
+
+@router.delete("/users/{user_id}/telegram", response_model=TelegramUnlinkResponse)
+async def admin_unlink_user_telegram(user_id: UUID, session: AsyncSession = Depends(get_db_session)):
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    removed = await unlink_telegram_accounts(session, user_id)
+    await session.commit()
+    return TelegramUnlinkResponse(ok=True, removed=removed)
 
 
 @router.get("/stats", response_model=AdminStatsResponse)
