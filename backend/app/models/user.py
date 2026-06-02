@@ -11,6 +11,7 @@ from app.models.mixins import TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.access_key import AccessKey
+    from app.models.order import Order
     from app.models.telegram_account import TelegramAccount
     from app.models.vpn_subscription import VpnSubscription
 
@@ -27,3 +28,4 @@ class User(TimestampMixin, Base):
     telegram_accounts: Mapped[list["TelegramAccount"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     subscriptions: Mapped[list["VpnSubscription"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     access_keys: Mapped[list["AccessKey"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    orders: Mapped[list["Order"]] = relationship(back_populates="user")

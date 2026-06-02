@@ -42,6 +42,7 @@ async def create_subscription(
     device_limit: int = 3,
     traffic_limit_gb: int | None = None,
     note: str | None = None,
+    plan_id: uuid.UUID | None = None,
     public_token: str | None = None,
     status_value: SubscriptionStatus = SubscriptionStatus.ACTIVE,
     xui_client_uuid: str | None = None,
@@ -60,6 +61,7 @@ async def create_subscription(
 
     subscription = VpnSubscription(
         user_id=user_id,
+        plan_id=plan_id,
         public_token=public_token,
         routing_mode=routing_mode.value,
         status=status_value.value,

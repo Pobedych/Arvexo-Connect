@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     xui_default_inbound_ids: str = "1,2,3,4,6"
     jwt_secret: str | None = None
     jwt_expires_minutes: int = 60
+    crypto_payment_network: str = "TRC20"
+    crypto_payment_address: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

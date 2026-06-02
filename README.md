@@ -135,6 +135,8 @@ Frontend routes:
 ```txt
 /cabinet/login
 /cabinet
+/cabinet/plans
+/cabinet/checkout
 /instructions/iphone
 /instructions/android
 /instructions/windows
@@ -159,6 +161,31 @@ Authorization: Bearer <access_token>
 ```
 
 The cabinet shows subscription status, QR code, copy button, instructions, and routing mode selector after a subscription is issued. A newly registered Arvexo Account can exist without a VPN subscription yet. The frontend stores the JWT in `localStorage` for MVP only; replace it with an httpOnly cookie session before a hardened production release.
+
+Plans and manual crypto orders:
+
+```bash
+JWT="<access_token>"
+
+curl http://127.0.0.1:8012/api/cabinet/plans
+
+curl -X POST http://127.0.0.1:8012/api/cabinet/custom-plan/quote \
+  -H "Content-Type: application/json" \
+  -d '{"devices_count":5,"duration_days":90,"default_mode":"smart","iphone_stable":true,"priority_support":false}'
+
+curl -X POST http://127.0.0.1:8012/api/cabinet/orders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -d '{"plan_code":"base"}'
+
+curl -X POST http://127.0.0.1:8012/api/cabinet/orders/<order_id>/payment \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -d '{"tx_hash":"tx123456789"}'
+
+curl -X POST http://127.0.0.1:8012/api/admin/orders/<order_id>/confirm \
+  -H "X-Admin-Token: change_me_admin_token"
+```
 
 For browser calls set:
 

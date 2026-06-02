@@ -24,3 +24,16 @@ class AuthProvider(StrEnum):
     TELEGRAM = "telegram"
     ACCESS_KEY = "access_key"
     EMAIL = "email"
+
+
+class OrderStatus(StrEnum):
+    PENDING = "pending"
+    WAITING_CONFIRMATION = "waiting_confirmation"
+    PAID = "paid"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+    FAILED = "failed"
+
+
+class PaymentMethod(StrEnum):
+    CRYPTO_MANUAL = "crypto_manual"

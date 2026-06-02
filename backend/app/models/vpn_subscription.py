@@ -10,6 +10,9 @@ from app.enums import RoutingMode, SubscriptionStatus
 from app.models.mixins import TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.device import Device
+    from app.models.order import Order
+    from app.models.plan import Plan
     from app.models.user import User
 
 class VpnSubscription(TimestampMixin, Base):
@@ -17,6 +20,7 @@ class VpnSubscription(TimestampMixin, Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    plan_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("plans.id", ondelete="SET NULL"))
     public_token: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     routing_mode: Mapped[str] = mapped_column(String(32), default=RoutingMode.SMART.value, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default=SubscriptionStatus.ACTIVE.value, nullable=False)
@@ -32,3 +36,6 @@ class VpnSubscription(TimestampMixin, Base):
     note: Mapped[Optional[str]] = mapped_column(Text)
 
     user: Mapped["User"] = relationship(back_populates="subscriptions")
+    plan: Mapped[Optional["Plan"]] = relationship(back_populates="subscriptions")
+    devices: Mapped[list["Device"]] = relationship(back_populates="subscription", cascade="all, delete-orphan")
+    orders: Mapped[list["Order"]] = relationship(back_populates="subscription")

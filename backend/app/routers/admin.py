@@ -2,10 +2,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db_session
+from app.enums import OrderStatus, RoutingMode
+from app.models.order import Order
 from app.models.user import User
+from app.schemas.billing import AdminConfirmOrderResponse
 from app.schemas.admin import (
     CreateAccessKeyResponse,
     CreateSubscriptionRequest,
@@ -25,7 +30,9 @@ from app.schemas.admin import (
 from app.schemas.common import UserOut, subscription_to_out
 from app.services.access_key_service import create_access_key
 from app.models.vpn_subscription import VpnSubscription
-from app.services.provisioning_service import provision_subscription
+from app.services.billing_service import load_order_for_output, order_to_out, require_order
+from app.services.provisioning_service import provision_subscription, provision_subscription_for_user
+from app.services.subscription_service import get_subscription_by_token
 from app.services.subscription_service import (
     create_subscription,
     disable_subscription,
@@ -35,8 +42,13 @@ from app.services.subscription_service import (
 )
 from app.services.user_service import create_user, upsert_telegram_user
 from app.utils.security import require_admin_token
+from app.utils.time import utc_now
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin_token)])
+
+
+def subscription_url(token: str) -> str:
+    return f"{settings.public_sub_base_url.rstrip('/')}/u/{token}" if token else ""
 
 
 @router.post("/users-with-subscription", response_model=CreateUserWithSubscriptionResponse)
@@ -108,6 +120,59 @@ async def list_users(session: AsyncSession = Depends(get_db_session)):
 async def list_subscriptions(session: AsyncSession = Depends(get_db_session)):
     result = await session.execute(select(VpnSubscription).order_by(VpnSubscription.created_at.desc()))
     return AdminSubscriptionListResponse(subscriptions=[subscription_to_out(item) for item in result.scalars().all()])
+
+
+@router.post("/orders/{order_id}/confirm", response_model=AdminConfirmOrderResponse)
+async def confirm_order(order_id: UUID, session: AsyncSession = Depends(get_db_session)):
+    order = await require_order(session, order_id)
+    if order.user_id is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Order has no user")
+    if order.status == OrderStatus.PAID.value:
+        order = await load_order_for_output(session, order.id)
+        token = order.subscription.public_token if order.subscription else ""
+        return AdminConfirmOrderResponse(ok=True, order=order_to_out(order), subscription_url=subscription_url(token), access_key=None)
+    if order.status not in (OrderStatus.PENDING.value, OrderStatus.WAITING_CONFIRMATION.value):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Order cannot be confirmed")
+
+    result = await session.execute(
+        select(Order)
+        .options(selectinload(Order.plan), selectinload(Order.user))
+        .where(Order.id == order.id)
+    )
+    order = result.scalar_one()
+    if order.plan is None or order.user is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Order is incomplete")
+
+    custom_config = (order.order_metadata or {}).get("custom_config") or {}
+    routing_mode = RoutingMode(custom_config.get("default_mode", RoutingMode.SMART.value))
+    duration_days = int(custom_config.get("duration_days", order.plan.duration_days))
+    device_limit = int(custom_config.get("devices_count", order.plan.device_limit))
+    note = f"Order {order.id} / plan {order.plan.code}"
+    provisioned = await provision_subscription_for_user(
+        session=session,
+        user=order.user,
+        routing_mode=routing_mode,
+        duration_days=duration_days,
+        device_limit=device_limit,
+        traffic_limit_gb=None,
+        note=note,
+        plan_id=order.plan_id,
+    )
+    subscription = await get_subscription_by_token(session, provisioned.subscription.token)
+    if subscription is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Subscription was not created")
+
+    order.status = OrderStatus.PAID.value
+    order.paid_at = utc_now()
+    order.subscription_id = subscription.id
+    await session.commit()
+    order = await load_order_for_output(session, order.id)
+    return AdminConfirmOrderResponse(
+        ok=True,
+        order=order_to_out(order),
+        subscription_url=subscription_url(subscription.public_token),
+        access_key=provisioned.access_key,
+    )
 
 
 @router.post("/users/{user_id}/subscriptions", response_model=CreateSubscriptionResponse)

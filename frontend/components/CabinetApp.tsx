@@ -240,9 +240,14 @@ export function CabinetApp() {
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff2b3a]">Ваш доступ</p>
               <h1 className="mt-4 text-3xl font-semibold">{subscription ? "Подписка активна" : "Подписка пока не выдана"}</h1>
               {!subscription && (
-                <p className="mt-4 max-w-2xl text-sm leading-7 text-white/62">
-                  Arvexo Account создан. Когда доступ будет выдан, здесь появятся subscription URL, QR-код и выбор режима.
-                </p>
+                <>
+                  <p className="mt-4 max-w-2xl text-sm leading-7 text-white/62">
+                    Arvexo Account создан. Выберите тариф и отправьте платеж на проверку, после подтверждения здесь появятся subscription URL, QR-код и выбор режима.
+                  </p>
+                  <Link href="/cabinet/plans" className="mt-6 inline-flex min-h-12 items-center rounded-lg bg-[#ef233c] px-5 text-sm font-bold">
+                    Выбрать тариф
+                  </Link>
+                </>
               )}
               {subscription && (
                 <>
