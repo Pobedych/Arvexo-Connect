@@ -80,11 +80,30 @@ def device_keyboard(token: str, devices: list[dict]) -> InlineKeyboardMarkup:
 
 async def first_subscription(telegram_id: int) -> dict | None:
     subscriptions = await backend.subscriptions(telegram_id)
-    return subscriptions[0] if subscriptions else None
+    active = active_subscriptions(subscriptions)
+    return active[0] if active else (subscriptions[0] if subscriptions else None)
 
 
 def active_subscriptions(subscriptions: list[dict]) -> list[dict]:
     return [item for item in subscriptions if item.get("status") in ("active", "trial")]
+
+
+def subscription_list_keyboard(subscriptions: list[dict]) -> InlineKeyboardMarkup:
+    rows = []
+    for index, item in enumerate(subscriptions[:10], 1):
+        plan = item.get("plan_name") or "Arvexo Connect"
+        days = item.get("days_left")
+        days_text = "без срока" if days is None else f"{days} дн."
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=f"{index}. {plan} · {item.get('status')} · {item.get('routing_mode')} · {days_text}",
+                    callback_data=f"sub_select:{item['token']}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="Назад", callback_data="menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def raw_url(subscription: dict) -> str:
@@ -130,9 +149,16 @@ async def send_devices(message: Message, telegram_id: int) -> None:
 
 
 async def send_access(message: Message, telegram_id: int) -> None:
-    subscriptions = active_subscriptions(await backend.subscriptions(telegram_id))
-    subscription = subscriptions[0] if subscriptions else None
-    if not subscription:
+    subscriptions = await backend.subscriptions(telegram_id)
+    active = active_subscriptions(subscriptions)
+    if len(subscriptions) > 1:
+        await message.answer(
+            "У вас несколько подписок. Выберите нужную:",
+            reply_markup=subscription_list_keyboard(subscriptions),
+        )
+        return
+    subscription = active[0] if active else (subscriptions[0] if subscriptions else None)
+    if not subscription or subscription.get("status") not in ("active", "trial"):
         await message.answer(
             "У вас пока нет активной подписки.\n\nЧтобы получить доступ, выберите тестовый доступ или напишите в поддержку.",
             reply_markup=main_menu(),
@@ -147,10 +173,10 @@ async def send_subscriptions(message: Message, telegram_id: int) -> None:
         await message.answer("Подписок пока нет.", reply_markup=main_menu())
         return
     text = "Ваши подписки:\n\n" + "\n\n".join(
-        f"{index + 1}. {item['token']}\nСтатус: {item['status']}\nРежим: {item['routing_mode']}\nУстройств: до {item.get('device_limit', 3)}"
+        f"{index + 1}. {item.get('plan_name') or 'Arvexo Connect'}\n{item['token']}\nСтатус: {item['status']}\nРежим: {item['routing_mode']}\nУстройств: {item.get('devices_used', 0)}/{item.get('device_limit', 3)}"
         for index, item in enumerate(subscriptions)
     )
-    await message.answer(text, reply_markup=main_menu())
+    await message.answer(text, reply_markup=subscription_list_keyboard(subscriptions))
 
 
 async def send_qr(message: Message, telegram_id: int) -> None:
@@ -239,6 +265,20 @@ async def main() -> None:
             await send_subscriptions(callback.message, callback.from_user.id)
         except Exception:
             await callback.message.answer("Не удалось загрузить подписки.", reply_markup=main_menu())
+
+    @dp.callback_query(F.data.startswith("sub_select:"))
+    async def subscription_select(callback: CallbackQuery) -> None:
+        await callback.answer()
+        token = callback.data.split(":", 1)[1]
+        try:
+            subscriptions = await backend.subscriptions(callback.from_user.id)
+            subscription = next((item for item in subscriptions if item.get("token") == token), None)
+            if not subscription:
+                await callback.message.answer("Подписка не найдена.", reply_markup=main_menu())
+                return
+            await callback.message.answer(subscription_text(subscription), reply_markup=mode_keyboard(subscription["token"]))
+        except Exception:
+            await callback.message.answer("Не удалось открыть подписку.", reply_markup=main_menu())
 
     @dp.callback_query(F.data == "refresh")
     async def refresh(callback: CallbackQuery) -> None:

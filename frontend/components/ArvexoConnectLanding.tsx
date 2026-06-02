@@ -40,9 +40,10 @@ const navItems = [
   { href: "#servers", label: "Серверы" },
   { href: "#pricing", label: "Тарифы" },
   { href: "#how-it-works", label: "Инструкция" },
-  { href: "/cabinet", label: "Кабинет" },
   { href: "#support", label: "Поддержка" }
 ];
+
+const JWT_STORAGE_KEY = "arvexo_cabinet_jwt";
 
 const trustItems = [
   {
@@ -265,6 +266,40 @@ function Header({
   menuOpen: boolean;
   setMenuOpen: (value: boolean) => void;
 }) {
+  const [accountInitial, setAccountInitial] = useState("");
+
+  useEffect(() => {
+    const jwt = localStorage.getItem(JWT_STORAGE_KEY);
+    if (!jwt) {
+      setAccountInitial("");
+      return;
+    }
+
+    let cancelled = false;
+    fetch(`${getApiBase()}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${jwt}` }
+    })
+      .then((response) => {
+        if (!response.ok) {
+          localStorage.removeItem(JWT_STORAGE_KEY);
+          return null;
+        }
+        return response.json();
+      })
+      .then((body) => {
+        if (!body || cancelled) return;
+        const name = body.account?.display_name || body.display_name || body.email || "A";
+        setAccountInitial(String(name).trim().slice(0, 1).toUpperCase() || "A");
+      })
+      .catch(() => {
+        if (!cancelled) setAccountInitial("");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <header className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#050505]/80 backdrop-blur-xl">
       <div className="mx-auto flex min-h-[76px] w-[min(calc(100%-32px),1180px)] items-center justify-between gap-6">
@@ -284,9 +319,19 @@ function Header({
         </nav>
 
         <div className="hidden items-center gap-3 lg:flex">
-          <a href="/cabinet" className="rounded-lg px-4 py-2 text-sm font-semibold text-white/70 transition hover:text-white">
-            Войти
-          </a>
+          {accountInitial ? (
+            <a
+              href="/cabinet"
+              aria-label="Личный кабинет"
+              className="grid h-10 w-10 place-items-center rounded-full border border-[#ef233c]/40 bg-[#ef233c]/15 text-sm font-black text-white shadow-[0_0_24px_rgba(239,35,60,0.18)] transition hover:border-[#ef233c]"
+            >
+              {accountInitial}
+            </a>
+          ) : (
+            <a href="/cabinet/login" className="rounded-lg px-4 py-2 text-sm font-semibold text-white/70 transition hover:text-white">
+              Войти
+            </a>
+          )}
           <a
             href="/cabinet"
             className="rounded-lg bg-[#ef233c] px-5 py-3 text-sm font-semibold text-white shadow-[0_0_34px_rgba(239,35,60,0.32)] transition hover:-translate-y-0.5 hover:bg-[#ff2b3a]"
@@ -318,13 +363,24 @@ function Header({
               {item.label}
             </a>
           ))}
-          <a
-            href="/cabinet"
-            className="rounded-lg border border-white/[0.1] bg-white/[0.04] px-4 py-3 text-center text-sm font-semibold text-white"
-            onClick={() => setMenuOpen(false)}
-          >
-            Войти в кабинет
-          </a>
+          {accountInitial ? (
+            <a
+              href="/cabinet"
+              className="flex items-center justify-center gap-3 rounded-lg border border-[#ef233c]/25 bg-[#ef233c]/10 px-4 py-3 text-center text-sm font-semibold text-white"
+              onClick={() => setMenuOpen(false)}
+            >
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-[#ef233c]/20">{accountInitial}</span>
+              Личный кабинет
+            </a>
+          ) : (
+            <a
+              href="/cabinet/login"
+              className="rounded-lg border border-white/[0.1] bg-white/[0.04] px-4 py-3 text-center text-sm font-semibold text-white"
+              onClick={() => setMenuOpen(false)}
+            >
+              Войти
+            </a>
+          )}
           <a
             href="/cabinet"
             className="rounded-lg bg-[#ef233c] px-4 py-3 text-center text-sm font-semibold text-white"
@@ -1282,4 +1338,10 @@ function FlowNode({
 
 function FlowLine() {
   return <div className="mx-auto h-8 w-px bg-gradient-to-b from-transparent via-[#ef233c]/55 to-transparent" />;
+}
+
+function getApiBase() {
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) return "http://127.0.0.1:8012";
+  return "https://api.arvexo.ru";
 }

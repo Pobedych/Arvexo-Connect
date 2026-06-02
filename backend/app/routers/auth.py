@@ -3,12 +3,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db_session
+from app.models.telegram_account import TelegramAccount
 from app.models.user import User
 from app.models.vpn_subscription import VpnSubscription
-from app.schemas.auth import AccessKeyRequest, AccessKeyResponse, AccountLoginRequest, AccountRegisterRequest
+from app.schemas.auth import AccessKeyRequest, AccessKeyResponse, AccountLoginRequest, AccountOut, AccountRegisterRequest
 from app.schemas.common import subscription_to_out
 from app.services.access_key_service import authenticate_access_key
 from app.services.user_service import authenticate_account_user, create_account_user, get_user_by_email
@@ -69,17 +71,33 @@ async def get_current_account(
 
 async def build_auth_response(session: AsyncSession, user_id: str) -> AccessKeyResponse:
     user_uuid = UUID(user_id)
-    result = await session.execute(select(VpnSubscription).where(VpnSubscription.user_id == user_uuid))
+    result = await session.execute(
+        select(VpnSubscription)
+        .options(selectinload(VpnSubscription.plan), selectinload(VpnSubscription.devices))
+        .where(VpnSubscription.user_id == user_uuid)
+        .order_by(VpnSubscription.created_at.desc())
+    )
     user = await session.get(User, user_uuid)
-    return build_access_response(str(user_uuid), list(result.scalars().all()), user)
+    telegram_connected = bool(
+        (
+            await session.execute(select(TelegramAccount.id).where(TelegramAccount.user_id == user_uuid).limit(1))
+        ).scalar_one_or_none()
+    )
+    return build_access_response(str(user_uuid), list(result.scalars().all()), user, telegram_connected)
 
 
-def build_access_response(user_id: str, subscriptions: list[VpnSubscription], user: User | None = None) -> AccessKeyResponse:
+def build_access_response(
+    user_id: str,
+    subscriptions: list[VpnSubscription],
+    user: User | None = None,
+    telegram_connected: bool = False,
+) -> AccessKeyResponse:
     return AccessKeyResponse(
         ok=True,
         user_id=user_id,
         email=user.email if user else None,
         display_name=user.display_name if user else None,
+        account=AccountOut(user_id=user_id, display_name=user.display_name if user else None, telegram_connected=telegram_connected),
         access_token=create_access_token(user_id),
         subscriptions=[subscription_to_out(subscription) for subscription in subscriptions],
     )

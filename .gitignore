@@ -21,3 +21,4 @@ bot/.venv
 bot/**/__pycache__
 bot/**/*.pyc
 .idea
+/Техническое задание- Arvexo Connect v1.0.pdf

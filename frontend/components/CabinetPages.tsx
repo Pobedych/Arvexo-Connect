@@ -26,15 +26,28 @@ type Subscription = {
   expires_at: string | null;
   days_left: number | null;
   device_limit: number;
+  devices_used: number;
+  plan_name: string | null;
   public_subscription_url: string;
+  raw_subscription_url: string;
 };
 
 type Device = {
   id: string;
   name: string | null;
   type: string | null;
+  is_active?: boolean;
+  source?: string | null;
+  user_agent?: string | null;
+  last_seen_at?: string | null;
   created_at: string;
 };
+
+const modes = [
+  { value: "smart", title: "Smart Russia", text: "Локальные сервисы напрямую, зарубежные через защищённый туннель." },
+  { value: "privacy", title: "Privacy", text: "Почти весь трафик идёт через защищённый туннель." },
+  { value: "global", title: "Global", text: "Для поездок и нестабильных сетей." },
+];
 
 const repairSteps: Record<string, string[]> = {
   telegram: ["Проверьте, выключен ли proxy внутри Telegram.", "Обновите подписку в VPN-приложении.", "Попробуйте режим Privacy.", "Если не помогло, напишите в поддержку."],
@@ -225,43 +238,203 @@ export function SupportApp() {
 export function SubscriptionDetailApp({ token }: { token: string }) {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
-  const rawUrl = useMemo(() => `${subscription?.public_subscription_url || ""}?format=raw`, [subscription]);
+  const [deviceName, setDeviceName] = useState("");
+  const [deviceType, setDeviceType] = useState("iphone");
+  const [telegramConnected, setTelegramConnected] = useState(false);
+  const [telegramLink, setTelegramLink] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const rawUrl = useMemo(() => subscription?.raw_subscription_url || `${subscription?.public_subscription_url || ""}?format=raw`, [subscription]);
 
   useEffect(() => {
+    void loadSubscription();
+    void loadTelegramStatus();
+  }, [token]);
+
+  async function loadSubscription() {
     const jwt = requireJwt();
     if (!jwt) return;
-    fetch(`${getApiBase()}/api/cabinet/subscription/${token}`, { headers: { Authorization: `Bearer ${jwt}` } })
+    await fetch(`${getApiBase()}/api/cabinet/subscription/${token}`, { headers: { Authorization: `Bearer ${jwt}` } })
       .then(checkAuth)
       .then((body) => setSubscription(body))
       .catch(() => setSubscription(null));
-    fetch(`${getApiBase()}/api/cabinet/subscription/${token}/devices`, { headers: { Authorization: `Bearer ${jwt}` } })
+    await fetch(`${getApiBase()}/api/cabinet/subscription/${token}/devices`, { headers: { Authorization: `Bearer ${jwt}` } })
       .then(checkAuth)
       .then((body) => setDevices(body.devices || []))
       .catch(() => setDevices([]));
-  }, [token]);
+  }
+
+  async function loadTelegramStatus() {
+    const jwt = requireJwt();
+    if (!jwt) return;
+    const response = await fetch(`${getApiBase()}/api/cabinet/telegram/status`, { headers: { Authorization: `Bearer ${jwt}` } });
+    if (response.ok) {
+      const payload = (await response.json()) as { connected: boolean };
+      setTelegramConnected(payload.connected);
+    }
+  }
+
+  async function changeMode(mode: string) {
+    const jwt = requireJwt();
+    if (!jwt || !subscription) return;
+    setError("");
+    setMessage("");
+    const response = await fetch(`${getApiBase()}/api/cabinet/subscription/${subscription.token}/mode`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+      body: JSON.stringify({ mode }),
+    });
+    if (!response.ok) {
+      setError(await readApiError(response, "Не удалось изменить режим"));
+      return;
+    }
+    setSubscription({ ...subscription, routing_mode: mode });
+    setMessage("Режим изменён. Чтобы применить его, обновите подписку в VPN-приложении.");
+  }
+
+  async function createTelegramLink() {
+    const jwt = requireJwt();
+    if (!jwt) return;
+    setError("");
+    const response = await fetch(`${getApiBase()}/api/cabinet/telegram/link-token`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${jwt}` },
+    });
+    if (!response.ok) {
+      setError("Не удалось создать ссылку Telegram");
+      return;
+    }
+    const payload = (await response.json()) as { telegram_link_url: string };
+    setTelegramLink(payload.telegram_link_url);
+    window.location.assign(payload.telegram_link_url);
+  }
+
+  async function addDevice() {
+    const jwt = requireJwt();
+    if (!jwt || !subscription || !deviceName.trim()) return;
+    setError("");
+    const response = await fetch(`${getApiBase()}/api/cabinet/subscription/${subscription.token}/devices`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+      body: JSON.stringify({ name: deviceName.trim(), type: deviceType }),
+    });
+    if (!response.ok) {
+      setError(await readApiError(response, "Не удалось добавить устройство"));
+      return;
+    }
+    setDeviceName("");
+    await loadSubscription();
+  }
+
+  async function deleteDevice(deviceId: string) {
+    const jwt = requireJwt();
+    if (!jwt || !subscription) return;
+    const response = await fetch(`${getApiBase()}/api/cabinet/subscription/${subscription.token}/devices/${deviceId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${jwt}` },
+    });
+    if (response.ok) await loadSubscription();
+  }
 
   return (
     <CabinetShell title="Подписка">
       {!subscription ? (
         <Empty text="Подписка не найдена или недоступна." />
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[1fr_0.7fr]">
-          <Panel title={subscription.token}>
+        <div className="grid gap-5">
+          <Link href="/cabinet" className="text-sm font-bold text-white/60 hover:text-white">← Все подписки</Link>
+          <Panel title={subscription.status === "active" ? "Подписка активна" : statusLabel(subscription.status)}>
             {subscription.status === "provisioning_failed" && <Notice tone="error">Доступ готовится, поддержка уже уведомлена.</Notice>}
+            <p className="mt-3 text-sm text-white/56">
+              {modeLabel(subscription.routing_mode)} · {subscription.days_left === null ? "без срока" : `осталось ${subscription.days_left} дней`} · {devices.length}/{subscription.device_limit} устройств
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button onClick={() => navigator.clipboard.writeText(rawUrl)} className="min-h-11 rounded-lg bg-[#ef233c] px-4 text-sm font-bold">Скопировать ссылку</button>
+              <a href="#qr" className="inline-flex min-h-11 items-center rounded-lg border border-white/[0.12] px-4 text-sm font-bold">Показать QR</a>
+              <Link href="/instructions/iphone" className="inline-flex min-h-11 items-center rounded-lg border border-white/[0.12] px-4 text-sm font-bold">Инструкция</Link>
+              <Link href="/cabinet/support" className="inline-flex min-h-11 items-center rounded-lg border border-white/[0.12] px-4 text-sm font-bold">Не работает</Link>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Info label="Статус" value={subscription.status} />
               <Info label="Режим" value={subscription.routing_mode} />
               <Info label="Осталось" value={subscription.days_left === null ? "без срока" : `${subscription.days_left} дней`} />
               <Info label="Устройства" value={`${devices.length}/${subscription.device_limit}`} />
             </div>
+            {message && <Notice>{message}</Notice>}
+            {error && <Notice tone="error">{error}</Notice>}
+          </Panel>
+
+          <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+            <Panel title="QR-код" >
+              <div id="qr">
+                <img alt="Subscription QR" className="aspect-square w-full max-w-sm rounded-lg bg-white p-4" src={`https://api.qrserver.com/v1/create-qr-code/?size=420x420&data=${encodeURIComponent(rawUrl)}`} />
+              </div>
+            </Panel>
+            <Panel title="Subscription URL">
             <div className="mt-5 rounded-lg border border-white/[0.08] bg-black/25 p-4">
               <p className="text-xs text-white/45">Raw subscription</p>
               <p className="mt-2 break-all text-sm text-white/72">{rawUrl}</p>
               <button onClick={() => navigator.clipboard.writeText(rawUrl)} className="mt-4 min-h-10 rounded-lg bg-[#ef233c] px-4 text-sm font-bold">Скопировать raw</button>
             </div>
+            </Panel>
+          </div>
+
+          <Panel title="Режим подключения">
+            <div className="grid gap-3 md:grid-cols-3">
+              {modes.map((mode) => (
+                <button
+                  key={mode.value}
+                  onClick={() => changeMode(mode.value)}
+                  className={`rounded-lg border p-4 text-left ${subscription.routing_mode === mode.value ? "border-[#ef233c] bg-[#ef233c]/12" : "border-white/[0.08] bg-black/25 hover:border-[#ef233c]/45"}`}
+                >
+                  <span className="text-base font-semibold">{mode.title}</span>
+                  <span className="mt-2 block text-sm leading-5 text-white/56">{mode.text}</span>
+                </button>
+              ))}
+            </div>
           </Panel>
-          <Panel title="QR">
-            <img alt="Subscription QR" className="aspect-square w-full rounded-lg bg-white p-4" src={`https://api.qrserver.com/v1/create-qr-code/?size=420x420&data=${encodeURIComponent(rawUrl)}`} />
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Panel title="Устройства">
+              <p className="text-sm text-white/48">{devices.length}/{subscription.device_limit}</p>
+              <div className="mt-4 grid gap-2">
+                {devices.map((device) => (
+                  <div key={device.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.08] bg-black/25 p-3">
+                    <div>
+                      <p className="text-sm font-bold">{device.name}</p>
+                      <p className="text-xs text-white/45">{device.type || "device"}{device.last_seen_at ? ` · ${new Date(device.last_seen_at).toLocaleString()}` : ""}</p>
+                    </div>
+                    <button onClick={() => deleteDevice(device.id)} className="rounded-lg border border-white/[0.1] px-3 py-2 text-xs font-bold">Удалить</button>
+                  </div>
+                ))}
+                {!devices.length && <p className="text-sm text-white/45">Устройства пока не добавлены.</p>}
+              </div>
+              <div className="mt-4 grid gap-2">
+                <input value={deviceName} onChange={(event) => setDeviceName(event.target.value)} placeholder="Название устройства" className="h-11 rounded-lg border border-white/[0.1] bg-black px-3 text-sm text-white outline-none focus:border-[#ef233c]" />
+                <select value={deviceType} onChange={(event) => setDeviceType(event.target.value)} className="h-11 rounded-lg border border-white/[0.1] bg-black px-3 text-sm text-white outline-none focus:border-[#ef233c]">
+                  <option value="iphone">iPhone</option>
+                  <option value="android">Android</option>
+                  <option value="windows">Windows</option>
+                  <option value="macos">macOS</option>
+                  <option value="other">Другое</option>
+                </select>
+                <button onClick={addDevice} disabled={!deviceName.trim() || devices.length >= subscription.device_limit} className="min-h-11 rounded-lg bg-white px-4 text-sm font-bold text-black disabled:opacity-50">Добавить устройство</button>
+              </div>
+            </Panel>
+
+            <Panel title="Telegram">
+              <p className="text-sm text-white/56">{telegramConnected ? "Telegram подключён." : "Подключите Telegram для управления подпиской и уведомлений."}</p>
+              {!telegramConnected && <button onClick={createTelegramLink} className="mt-4 min-h-11 rounded-lg bg-[#ef233c] px-4 text-sm font-bold">Подключить Telegram</button>}
+              {telegramLink && <a href={telegramLink} className="mt-3 block break-all text-sm font-semibold text-[#ffb3bb]">{telegramLink}</a>}
+            </Panel>
+          </div>
+
+          <Panel title="Как подключиться">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <InstructionLink href="/instructions/iphone" label="iPhone" />
+              <InstructionLink href="/instructions/android" label="Android" />
+              <InstructionLink href="/instructions/windows" label="Windows" />
+            </div>
           </Panel>
         </div>
       )}
@@ -319,6 +492,31 @@ function Empty({ text }: { text: string }) {
   return <div className="rounded-lg border border-white/[0.08] bg-[#101010] p-5 text-sm text-white/56">{text}</div>;
 }
 
+function InstructionLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link href={href} className="flex items-center justify-between rounded-lg border border-white/[0.08] bg-black/25 p-4 text-sm font-bold hover:border-[#ef233c]/45">
+      {label}
+      <span className="text-[#ff2b3a]">→</span>
+    </Link>
+  );
+}
+
+function statusLabel(status: string) {
+  if (status === "active") return "Подписка активна";
+  if (status === "trial") return "Тестовая подписка";
+  if (status === "expired") return "Подписка истекла";
+  if (status === "disabled") return "Подписка отключена";
+  if (status === "provisioning_failed") return "Доступ готовится";
+  return status;
+}
+
+function modeLabel(mode: string) {
+  if (mode === "smart") return "Smart Russia";
+  if (mode === "privacy") return "Privacy Mode";
+  if (mode === "global") return "Global Mode";
+  return mode;
+}
+
 function requireJwt() {
   const jwt = localStorage.getItem(JWT_STORAGE_KEY);
   if (!jwt) {
@@ -345,4 +543,15 @@ function getApiBase() {
   if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
   if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) return "http://127.0.0.1:8012";
   return "https://api.arvexo.ru";
+}
+
+async function readApiError(response: Response, fallback: string) {
+  try {
+    const body = (await response.json()) as { detail?: string | { msg?: string }[] };
+    if (typeof body.detail === "string" && body.detail.trim()) return body.detail;
+    if (Array.isArray(body.detail) && body.detail[0]?.msg) return body.detail[0].msg;
+  } catch {
+    // Keep fallback when the API did not return JSON.
+  }
+  return fallback;
 }

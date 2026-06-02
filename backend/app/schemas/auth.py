@@ -3,6 +3,12 @@ from pydantic import BaseModel, Field, field_validator
 from app.schemas.common import SubscriptionOut
 
 
+class AccountOut(BaseModel):
+    user_id: str
+    display_name: str | None = None
+    telegram_connected: bool = False
+
+
 class AccessKeyRequest(BaseModel):
     access_key: str
 
@@ -39,6 +45,7 @@ class AccessKeyResponse(BaseModel):
     user_id: str
     email: str | None = None
     display_name: str | None = None
+    account: AccountOut | None = None
     access_token: str
     token_type: str = "bearer"
     subscriptions: list[SubscriptionOut]
