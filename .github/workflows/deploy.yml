@@ -148,20 +148,19 @@ jobs:
           test -f backend/.env || (echo "backend/.env is missing" && exit 1)
           grep -Eq '^JWT_SECRET=.+$' backend/.env || (echo "JWT_SECRET is missing in backend/.env" && exit 1)
 
+          docker compose -f docker-compose.prod.yml build backend
+          docker compose -f docker-compose.prod.yml build frontend
+          docker compose -f docker-compose.prod.yml build bot
+
           docker compose -f docker-compose.prod.yml up -d postgres
           until docker compose -f docker-compose.prod.yml exec -T postgres pg_isready -U arvexo -d arvexo_connect; do
             sleep 2
           done
 
-          docker compose -f docker-compose.prod.yml build backend
-          docker compose -f docker-compose.prod.yml up -d backend
-          docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head
-
-          docker compose -f docker-compose.prod.yml build frontend
-          docker compose -f docker-compose.prod.yml up -d frontend
-
-          docker compose -f docker-compose.prod.yml build bot
-          docker compose -f docker-compose.prod.yml up -d bot
+          docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
+          docker compose -f docker-compose.prod.yml up -d --force-recreate backend
+          docker compose -f docker-compose.prod.yml up -d --force-recreate frontend
+          docker compose -f docker-compose.prod.yml up -d --force-recreate bot
 
           docker compose -f docker-compose.prod.yml ps
           docker image prune -f
