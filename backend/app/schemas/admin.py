@@ -91,3 +91,14 @@ class AdminUserListResponse(BaseModel):
 
 class AdminSubscriptionListResponse(BaseModel):
     subscriptions: list[SubscriptionOut]
+
+
+class AdminStatsResponse(BaseModel):
+    users_total: int
+    subscriptions_total: int
+    subscriptions_active: int
+    orders_total: int
+    orders_pending: int
+    orders_waiting_confirmation: int
+    orders_paid: int
+    promo_codes_active: int

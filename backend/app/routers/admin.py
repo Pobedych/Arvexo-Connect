@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,8 +9,10 @@ from app.config import settings
 from app.database import get_db_session
 from app.enums import OrderStatus, RoutingMode
 from app.models.order import Order
+from app.models.promo_code import PromoCode
 from app.models.user import User
 from app.schemas.billing import AdminConfirmOrderResponse
+from app.schemas.billing import OrdersResponse
 from app.schemas.promo import CreatePromoCodeRequest, CreatePromoCodeResponse, PromoCodesResponse
 from app.schemas.admin import (
     CreateAccessKeyResponse,
@@ -24,6 +26,7 @@ from app.schemas.admin import (
     AdminChangeModeRequest,
     AdminChangeOriginalSubUrlRequest,
     AdminSubscriptionListResponse,
+    AdminStatsResponse,
     AdminUserListResponse,
     ProvisionSubscriptionRequest,
     ProvisionSubscriptionResponse,
@@ -118,10 +121,37 @@ async def list_users(session: AsyncSession = Depends(get_db_session)):
     return AdminUserListResponse(users=[UserOut.model_validate(user) for user in result.scalars().all()])
 
 
+@router.get("/stats", response_model=AdminStatsResponse)
+async def get_admin_stats(session: AsyncSession = Depends(get_db_session)):
+    async def count(query):
+        return int((await session.execute(query)).scalar_one())
+
+    return AdminStatsResponse(
+        users_total=await count(select(func.count()).select_from(User)),
+        subscriptions_total=await count(select(func.count()).select_from(VpnSubscription)),
+        subscriptions_active=await count(select(func.count()).select_from(VpnSubscription).where(VpnSubscription.status == "active")),
+        orders_total=await count(select(func.count()).select_from(Order)),
+        orders_pending=await count(select(func.count()).select_from(Order).where(Order.status == OrderStatus.PENDING.value)),
+        orders_waiting_confirmation=await count(select(func.count()).select_from(Order).where(Order.status == OrderStatus.WAITING_CONFIRMATION.value)),
+        orders_paid=await count(select(func.count()).select_from(Order).where(Order.status == OrderStatus.PAID.value)),
+        promo_codes_active=await count(select(func.count()).select_from(PromoCode).where(PromoCode.status == "active")),
+    )
+
+
 @router.get("/subscriptions", response_model=AdminSubscriptionListResponse)
 async def list_subscriptions(session: AsyncSession = Depends(get_db_session)):
     result = await session.execute(select(VpnSubscription).order_by(VpnSubscription.created_at.desc()))
     return AdminSubscriptionListResponse(subscriptions=[subscription_to_out(item) for item in result.scalars().all()])
+
+
+@router.get("/orders", response_model=OrdersResponse)
+async def admin_list_orders(session: AsyncSession = Depends(get_db_session)):
+    result = await session.execute(
+        select(Order)
+        .options(selectinload(Order.plan), selectinload(Order.subscription))
+        .order_by(Order.created_at.desc())
+    )
+    return OrdersResponse(orders=[order_to_out(order) for order in result.scalars().all()])
 
 
 @router.get("/promo-codes", response_model=PromoCodesResponse)
