@@ -15,14 +15,23 @@ backend = BackendClient()
 def main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Мой доступ", callback_data="access")],
-            [InlineKeyboardButton(text="Получить подписку", callback_data="trial")],
-            [InlineKeyboardButton(text="Показать QR", callback_data="qr")],
-            [InlineKeyboardButton(text="Сменить режим", callback_data="modes")],
+            [
+                InlineKeyboardButton(text="Мой доступ", callback_data="access"),
+                InlineKeyboardButton(text="Все подписки", callback_data="subscriptions"),
+            ],
+            [
+                InlineKeyboardButton(text="Показать QR", callback_data="qr"),
+                InlineKeyboardButton(text="Raw link", callback_data="raw_link"),
+            ],
+            [
+                InlineKeyboardButton(text="Сменить режим", callback_data="modes"),
+                InlineKeyboardButton(text="Обновить", callback_data="refresh"),
+            ],
             [
                 InlineKeyboardButton(text="Инструкция iPhone", callback_data="instruction_iphone"),
                 InlineKeyboardButton(text="Инструкция Android", callback_data="instruction_android"),
             ],
+            [InlineKeyboardButton(text="Получить тестовую подписку", callback_data="trial")],
             [InlineKeyboardButton(text="Поддержка", url=settings.support_url)],
         ]
     )
@@ -34,6 +43,7 @@ def mode_keyboard(token: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Smart Russia", callback_data=f"mode:{token}:smart")],
             [InlineKeyboardButton(text="Privacy", callback_data=f"mode:{token}:privacy")],
             [InlineKeyboardButton(text="Global", callback_data=f"mode:{token}:global")],
+            [InlineKeyboardButton(text="Назад", callback_data="menu")],
         ]
     )
 
@@ -41,6 +51,14 @@ def mode_keyboard(token: str) -> InlineKeyboardMarkup:
 async def first_subscription(telegram_id: int) -> dict | None:
     subscriptions = await backend.subscriptions(telegram_id)
     return subscriptions[0] if subscriptions else None
+
+
+def active_subscriptions(subscriptions: list[dict]) -> list[dict]:
+    return [item for item in subscriptions if item.get("status") in ("active", "trial")]
+
+
+def raw_url(subscription: dict) -> str:
+    return f"{subscription['public_subscription_url']}?format=raw"
 
 
 def subscription_text(subscription: dict) -> str:
@@ -52,12 +70,15 @@ def subscription_text(subscription: dict) -> str:
         f"Осталось: {days_text}\n"
         f"Устройств: до {subscription.get('device_limit', 3)}\n\n"
         "Ссылка подписки:\n"
-        f"{subscription['public_subscription_url']}"
+        f"{subscription['public_subscription_url']}\n\n"
+        "Raw import:\n"
+        f"{raw_url(subscription)}"
     )
 
 
-async def send_access(message: Message) -> None:
-    subscription = await first_subscription(message.from_user.id)
+async def send_access(message: Message, telegram_id: int) -> None:
+    subscriptions = active_subscriptions(await backend.subscriptions(telegram_id))
+    subscription = subscriptions[0] if subscriptions else None
     if not subscription:
         await message.answer(
             "У вас пока нет активной подписки.\n\nЧтобы получить доступ, выберите тестовый доступ или напишите в поддержку.",
@@ -67,19 +88,41 @@ async def send_access(message: Message) -> None:
     await message.answer(subscription_text(subscription), reply_markup=main_menu())
 
 
-async def send_qr(message: Message) -> None:
-    subscription = await first_subscription(message.from_user.id)
+async def send_subscriptions(message: Message, telegram_id: int) -> None:
+    subscriptions = await backend.subscriptions(telegram_id)
+    if not subscriptions:
+        await message.answer("Подписок пока нет.", reply_markup=main_menu())
+        return
+    text = "Ваши подписки:\n\n" + "\n\n".join(
+        f"{index + 1}. {item['token']}\nСтатус: {item['status']}\nРежим: {item['routing_mode']}\nУстройств: до {item.get('device_limit', 3)}"
+        for index, item in enumerate(subscriptions)
+    )
+    await message.answer(text, reply_markup=main_menu())
+
+
+async def send_qr(message: Message, telegram_id: int) -> None:
+    subscriptions = active_subscriptions(await backend.subscriptions(telegram_id))
+    subscription = subscriptions[0] if subscriptions else None
     if not subscription:
         await message.answer("Сначала получите подписку.", reply_markup=main_menu())
         return
-    image = qrcode.make(subscription["public_subscription_url"])
+    image = qrcode.make(raw_url(subscription))
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     await message.answer_photo(
         BufferedInputFile(buffer.getvalue(), filename="arvexo-subscription.png"),
-        caption="QR-код subscription-ссылки.",
+        caption="QR-код raw subscription-ссылки для импорта.",
         reply_markup=main_menu(),
     )
+
+
+async def send_raw_link(message: Message, telegram_id: int) -> None:
+    subscriptions = active_subscriptions(await backend.subscriptions(telegram_id))
+    subscription = subscriptions[0] if subscriptions else None
+    if not subscription:
+        await message.answer("Сначала получите подписку.", reply_markup=main_menu())
+        return
+    await message.answer("Raw subscription link:\n" + raw_url(subscription), reply_markup=main_menu())
 
 
 async def main() -> None:
@@ -97,7 +140,14 @@ async def main() -> None:
                     first_name=message.from_user.first_name,
                     language_code=message.from_user.language_code,
                 )
-                await message.answer("Telegram подключён к вашему Arvexo Account.", reply_markup=main_menu())
+                subscription = await first_subscription(message.from_user.id)
+                if subscription:
+                    await message.answer(
+                        "Telegram подключён к вашему Arvexo Account.\n\n" + subscription_text(subscription),
+                        reply_markup=main_menu(),
+                    )
+                else:
+                    await message.answer("Telegram подключён к вашему Arvexo Account.", reply_markup=main_menu())
                 return
             except Exception:
                 await message.answer("Ссылка подключения недействительна или истекла.", reply_markup=main_menu())
@@ -113,7 +163,31 @@ async def main() -> None:
     @dp.callback_query(F.data == "access")
     async def access(callback: CallbackQuery) -> None:
         await callback.answer()
-        await send_access(callback.message)
+        try:
+            await send_access(callback.message, callback.from_user.id)
+        except Exception:
+            await callback.message.answer("Не удалось загрузить доступ. Попробуйте ещё раз.", reply_markup=main_menu())
+
+    @dp.callback_query(F.data == "subscriptions")
+    async def subscriptions(callback: CallbackQuery) -> None:
+        await callback.answer()
+        try:
+            await send_subscriptions(callback.message, callback.from_user.id)
+        except Exception:
+            await callback.message.answer("Не удалось загрузить подписки.", reply_markup=main_menu())
+
+    @dp.callback_query(F.data == "refresh")
+    async def refresh(callback: CallbackQuery) -> None:
+        await callback.answer("Обновлено")
+        try:
+            await send_access(callback.message, callback.from_user.id)
+        except Exception:
+            await callback.message.answer("Не удалось обновить данные.", reply_markup=main_menu())
+
+    @dp.callback_query(F.data == "menu")
+    async def menu(callback: CallbackQuery) -> None:
+        await callback.answer()
+        await callback.message.answer("Arvexo Connect\n\nВыберите действие:", reply_markup=main_menu())
 
     @dp.callback_query(F.data == "trial")
     async def trial(callback: CallbackQuery) -> None:
@@ -134,12 +208,24 @@ async def main() -> None:
     @dp.callback_query(F.data == "qr")
     async def qr(callback: CallbackQuery) -> None:
         await callback.answer()
-        await send_qr(callback.message)
+        try:
+            await send_qr(callback.message, callback.from_user.id)
+        except Exception:
+            await callback.message.answer("Не удалось сформировать QR.", reply_markup=main_menu())
+
+    @dp.callback_query(F.data == "raw_link")
+    async def raw_link(callback: CallbackQuery) -> None:
+        await callback.answer()
+        try:
+            await send_raw_link(callback.message, callback.from_user.id)
+        except Exception:
+            await callback.message.answer("Не удалось получить raw link.", reply_markup=main_menu())
 
     @dp.callback_query(F.data == "modes")
     async def modes(callback: CallbackQuery) -> None:
         await callback.answer()
-        subscription = await first_subscription(callback.from_user.id)
+        subscriptions = active_subscriptions(await backend.subscriptions(callback.from_user.id))
+        subscription = subscriptions[0] if subscriptions else None
         if not subscription:
             await callback.message.answer("Сначала получите подписку.", reply_markup=main_menu())
             return
@@ -148,12 +234,15 @@ async def main() -> None:
     @dp.callback_query(F.data.startswith("mode:"))
     async def change_mode(callback: CallbackQuery) -> None:
         await callback.answer()
-        _, token, mode = callback.data.split(":")
-        await backend.change_mode(callback.from_user.id, token, mode)
-        await callback.message.answer(
-            f"Режим изменён на {mode}.\n\nЧтобы применить изменения, обновите подписку в VPN-приложении.",
-            reply_markup=main_menu(),
-        )
+        try:
+            _, token, mode = callback.data.split(":")
+            await backend.change_mode(callback.from_user.id, token, mode)
+            await callback.message.answer(
+                f"Режим изменён на {mode}.\n\nЧтобы применить изменения, обновите подписку в VPN-приложении.",
+                reply_markup=main_menu(),
+            )
+        except Exception:
+            await callback.message.answer("Не удалось изменить режим. Проверьте активность подписки.", reply_markup=main_menu())
 
     @dp.callback_query(F.data.startswith("instruction_"))
     async def instruction(callback: CallbackQuery) -> None:
