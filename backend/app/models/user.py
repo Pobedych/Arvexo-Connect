@@ -1,7 +1,8 @@
 import uuid
+from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import String, Text
+from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -17,8 +18,11 @@ class User(TimestampMixin, Base):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    email: Mapped[Optional[str]] = mapped_column(String(320), unique=True, index=True)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(256))
     display_name: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(32), default=UserStatus.ACTIVE.value, nullable=False)
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     telegram_accounts: Mapped[list["TelegramAccount"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     subscriptions: Mapped[list["VpnSubscription"]] = relationship(back_populates="user", cascade="all, delete-orphan")

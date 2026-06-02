@@ -41,6 +41,25 @@ def verify_access_key(access_key: str, stored_hash: str) -> bool:
     return hmac.compare_digest(candidate.hex(), digest)
 
 
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 180_000)
+    return f"pbkdf2_sha256${salt}${digest.hex()}"
+
+
+def verify_password(password: str, stored_hash: str | None) -> bool:
+    if not stored_hash:
+        return False
+    try:
+        algorithm, salt, digest = stored_hash.split("$", 2)
+    except ValueError:
+        return False
+    if algorithm != "pbkdf2_sha256":
+        return False
+    candidate = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 180_000)
+    return hmac.compare_digest(candidate.hex(), digest)
+
+
 def constant_time_equal(left: str, right: str) -> bool:
     return hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
 

@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     bot_internal_token: str = "change_me_bot_token"
     upstream_ssl_verify: bool = False
     request_timeout: int = 15
-    cors_origins: str = "https://connect.arvexo.ru,http://localhost:3000,http://localhost:3002"
+    cors_origins: str = "https://connect.arvexo.ru,http://localhost:3000,http://localhost:3002,http://127.0.0.1:3002"
     xui_base_url: str = "https://monitor.vpn.arvexo.ru:32145/Lb9BYg8zvNRCZMPeon"
     xui_api_token: str = "change_me_xui_api_token"
     xui_sub_base_url: str = "https://monitor.vpn.arvexo.ru:2096"

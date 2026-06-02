@@ -31,8 +31,13 @@ const modes = [
 ];
 
 const JWT_STORAGE_KEY = "arvexo_cabinet_jwt";
+type AuthMode = "register" | "login" | "access-key";
 
 export function CabinetApp() {
+  const [authMode, setAuthMode] = useState<AuthMode>("register");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [accessKey, setAccessKey] = useState("");
   const [jwt, setJwt] = useState(() => (typeof window === "undefined" ? "" : localStorage.getItem(JWT_STORAGE_KEY) || ""));
   const [data, setData] = useState<AuthResponse | null>(null);
@@ -46,7 +51,43 @@ export function CabinetApp() {
     return data.subscriptions.find((item) => item.token === selectedToken) || data.subscriptions[0];
   }, [data, selectedToken]);
 
-  async function login() {
+  function applyAuthPayload(payload: AuthResponse) {
+    // TODO: replace localStorage JWT storage with an httpOnly cookie session.
+    localStorage.setItem(JWT_STORAGE_KEY, payload.access_token);
+    setJwt(payload.access_token);
+    setData(payload);
+    setAccessKey("");
+    setPassword("");
+    setSelectedToken(payload.subscriptions[0]?.token || "");
+  }
+
+  async function submitAccountAuth() {
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const isRegistration = authMode === "register";
+      const response = await fetch(`${getApiBase()}/api/auth/${isRegistration ? "register" : "login"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          ...(isRegistration && displayName.trim() ? { display_name: displayName.trim() } : {})
+        })
+      });
+      if (!response.ok) {
+        throw new Error(isRegistration ? "Не удалось создать Arvexo Account" : "Неверный email или пароль");
+      }
+      applyAuthPayload((await response.json()) as AuthResponse);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось выполнить вход");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loginWithAccessKey() {
     setLoading(true);
     setError("");
     setMessage("");
@@ -57,13 +98,7 @@ export function CabinetApp() {
         body: JSON.stringify({ access_key: accessKey.trim() })
       });
       if (!response.ok) throw new Error("Access key не найден");
-      const payload = (await response.json()) as AuthResponse;
-      // TODO: replace localStorage JWT storage with an httpOnly cookie session.
-      localStorage.setItem(JWT_STORAGE_KEY, payload.access_token);
-      setJwt(payload.access_token);
-      setData(payload);
-      setAccessKey("");
-      setSelectedToken(payload.subscriptions[0]?.token || "");
+      applyAuthPayload((await response.json()) as AuthResponse);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось войти");
     } finally {
@@ -114,6 +149,8 @@ export function CabinetApp() {
     localStorage.removeItem(JWT_STORAGE_KEY);
     setData(null);
     setAccessKey("");
+    setEmail("");
+    setPassword("");
     setJwt("");
     setSelectedToken("");
     if (redirectToLogin && typeof window !== "undefined") {
@@ -140,24 +177,71 @@ export function CabinetApp() {
 
         {!data ? (
           <div className="mx-auto mt-16 max-w-xl rounded-[28px] border border-white/[0.08] bg-[#101010] p-6 md:p-8">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff2b3a]">Личный кабинет</p>
-            <h1 className="mt-4 text-4xl font-semibold">Вход по access key</h1>
-            <input
-              value={accessKey}
-              onChange={(event) => setAccessKey(event.target.value)}
-              placeholder="ARVX-XXXX-XXXX-XXXX"
-              className="mt-8 min-h-12 w-full rounded-lg border border-white/[0.1] bg-black/35 px-4 text-white outline-none focus:border-[#ef233c]"
-            />
-            <button onClick={login} disabled={loading} className="mt-4 min-h-12 w-full rounded-lg bg-[#ef233c] px-5 text-sm font-bold disabled:opacity-60">
-              {loading ? "Проверяем..." : "Войти"}
-            </button>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff2b3a]">Arvexo Account</p>
+            <h1 className="mt-4 text-4xl font-semibold">
+              {authMode === "register" ? "Создать аккаунт" : authMode === "login" ? "Войти в аккаунт" : "Вход по access key"}
+            </h1>
+            <div className="mt-6 grid grid-cols-3 rounded-xl border border-white/[0.08] bg-black/25 p-1 text-xs font-bold sm:text-sm">
+              <AuthModeButton active={authMode === "register"} onClick={() => setAuthMode("register")} label="Регистрация" />
+              <AuthModeButton active={authMode === "login"} onClick={() => setAuthMode("login")} label="Вход" />
+              <AuthModeButton active={authMode === "access-key"} onClick={() => setAuthMode("access-key")} label="Access key" />
+            </div>
+
+            {authMode === "access-key" ? (
+              <>
+                <input
+                  value={accessKey}
+                  onChange={(event) => setAccessKey(event.target.value)}
+                  placeholder="ARVX-XXXX-XXXX-XXXX"
+                  className="mt-8 min-h-12 w-full rounded-lg border border-white/[0.1] bg-black/35 px-4 text-white outline-none focus:border-[#ef233c]"
+                />
+                <button onClick={loginWithAccessKey} disabled={loading} className="mt-4 min-h-12 w-full rounded-lg bg-[#ef233c] px-5 text-sm font-bold disabled:opacity-60">
+                  {loading ? "Проверяем..." : "Войти по access key"}
+                </button>
+              </>
+            ) : (
+              <>
+                {authMode === "register" && (
+                  <input
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                    placeholder="Имя"
+                    className="mt-8 min-h-12 w-full rounded-lg border border-white/[0.1] bg-black/35 px-4 text-white outline-none focus:border-[#ef233c]"
+                  />
+                )}
+                <input
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="email@example.com"
+                  type="email"
+                  autoComplete="email"
+                  className={`${authMode === "register" ? "mt-3" : "mt-8"} min-h-12 w-full rounded-lg border border-white/[0.1] bg-black/35 px-4 text-white outline-none focus:border-[#ef233c]`}
+                />
+                <input
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Пароль"
+                  type="password"
+                  autoComplete={authMode === "register" ? "new-password" : "current-password"}
+                  className="mt-3 min-h-12 w-full rounded-lg border border-white/[0.1] bg-black/35 px-4 text-white outline-none focus:border-[#ef233c]"
+                />
+                <button onClick={submitAccountAuth} disabled={loading} className="mt-4 min-h-12 w-full rounded-lg bg-[#ef233c] px-5 text-sm font-bold disabled:opacity-60">
+                  {loading ? "Проверяем..." : authMode === "register" ? "Создать Arvexo Account" : "Войти через Arvexo Account"}
+                </button>
+              </>
+            )}
             {error && <p className="mt-4 text-sm text-[#ff2b3a]">{error}</p>}
           </div>
         ) : (
           <div className="mt-10 grid gap-5 lg:grid-cols-[1fr_0.82fr]">
             <section className="rounded-[28px] border border-white/[0.08] bg-[#101010] p-6">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff2b3a]">Ваш доступ</p>
-              <h1 className="mt-4 text-3xl font-semibold">Подписка активна</h1>
+              <h1 className="mt-4 text-3xl font-semibold">{subscription ? "Подписка активна" : "Подписка пока не выдана"}</h1>
+              {!subscription && (
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-white/62">
+                  Arvexo Account создан. Когда доступ будет выдан, здесь появятся subscription URL, QR-код и выбор режима.
+                </p>
+              )}
               {subscription && (
                 <>
                   <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -222,6 +306,18 @@ export function CabinetApp() {
         )}
       </section>
     </main>
+  );
+}
+
+function AuthModeButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-h-10 rounded-lg px-2 transition ${active ? "bg-[#ef233c] text-white" : "text-white/56 hover:text-white"}`}
+    >
+      {label}
+    </button>
   );
 }
 

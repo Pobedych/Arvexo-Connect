@@ -140,13 +140,25 @@ Frontend routes:
 /instructions/windows
 ```
 
-The cabinet logs in with an access key and receives a JWT access token. Cabinet subscription status and mode changes require:
+The cabinet supports Arvexo Account email/password registration and login:
+
+```bash
+curl -X POST http://127.0.0.1:8012/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"strongpass123","display_name":"User"}'
+
+curl -X POST http://127.0.0.1:8012/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"strongpass123"}'
+```
+
+Legacy access key login is still supported for manually issued accesses. All auth methods receive a JWT access token. Cabinet subscription status and mode changes require:
 
 ```txt
 Authorization: Bearer <access_token>
 ```
 
-The cabinet shows subscription status, QR code, copy button, instructions, and routing mode selector. The frontend stores the JWT in `localStorage` for MVP only; replace it with an httpOnly cookie session before a hardened production release.
+The cabinet shows subscription status, QR code, copy button, instructions, and routing mode selector after a subscription is issued. A newly registered Arvexo Account can exist without a VPN subscription yet. The frontend stores the JWT in `localStorage` for MVP only; replace it with an httpOnly cookie session before a hardened production release.
 
 For browser calls set:
 
