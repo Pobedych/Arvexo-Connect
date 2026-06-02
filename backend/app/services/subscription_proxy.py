@@ -30,8 +30,8 @@ def build_subscription_headers(subscription: VpnSubscription) -> dict[str, str]:
     )
     headers["Profile-Update-Interval"] = "1"
     headers["Profile-Title"] = f"base64:{title}"
-    headers["Support-Url"] = settings.public_frontend_url.rstrip("/")
-    headers["Profile-Web-Page-Url"] = settings.public_frontend_url.rstrip("/")
+    headers["Support-Url"] = settings.public_frontend_base_url.rstrip("/")
+    headers["Profile-Web-Page-Url"] = settings.public_frontend_base_url.rstrip("/")
     return headers
 
 
