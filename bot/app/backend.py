@@ -76,3 +76,44 @@ class BackendClient:
             )
             response.raise_for_status()
             return response.json()
+
+    async def devices(self, telegram_id: int, token: str) -> list[dict]:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(
+                f"{self.base_url}/api/telegram/subscriptions/{token}/devices",
+                headers=self.headers,
+                params={"telegram_id": telegram_id},
+            )
+            response.raise_for_status()
+            return response.json().get("devices", [])
+
+    async def add_device(self, telegram_id: int, token: str, name: str, device_type: str = "other") -> dict:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                f"{self.base_url}/api/telegram/subscriptions/{token}/devices",
+                headers=self.headers,
+                params={"telegram_id": telegram_id},
+                json={"name": name, "type": device_type},
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def delete_device(self, telegram_id: int, token: str, device_id: str) -> dict:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.delete(
+                f"{self.base_url}/api/telegram/subscriptions/{token}/devices/{device_id}",
+                headers=self.headers,
+                params={"telegram_id": telegram_id},
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def record_notification(self, telegram_id: int, event: str, message: str, token: str | None = None) -> dict:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                f"{self.base_url}/api/telegram/notifications",
+                headers=self.headers,
+                json={"telegram_id": telegram_id, "event": event, "message": message, "token": token},
+            )
+            response.raise_for_status()
+            return response.json()

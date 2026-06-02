@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db_session
-from app.enums import OrderStatus, RoutingMode
+from app.enums import OrderStatus, RoutingMode, SubscriptionStatus
+from app.models.audit_log import AuditLog
 from app.models.order import Order
 from app.models.promo_code import PromoCode
 from app.models.user import User
@@ -28,6 +29,9 @@ from app.schemas.admin import (
     AdminSubscriptionListResponse,
     AdminStatsResponse,
     AdminUserListResponse,
+    AuditLogOut,
+    AuditLogResponse,
+    ChangeDeviceLimitRequest,
     ProvisionSubscriptionRequest,
     ProvisionSubscriptionResponse,
 )
@@ -35,6 +39,7 @@ from app.schemas.common import UserOut, subscription_to_out
 from app.services.access_key_service import create_access_key
 from app.models.vpn_subscription import VpnSubscription
 from app.services.billing_service import load_order_for_output, order_to_out, require_order
+from app.services.audit_service import write_audit_log
 from app.services.provisioning_service import provision_subscription, provision_subscription_for_user
 from app.services.promo_service import create_promo_code, list_promo_codes, promo_code_to_out
 from app.services.telegram_link_service import unlink_telegram_accounts
@@ -150,6 +155,23 @@ async def get_admin_stats(session: AsyncSession = Depends(get_db_session)):
     )
 
 
+@router.get("/audit-log", response_model=AuditLogResponse)
+async def list_audit_log(session: AsyncSession = Depends(get_db_session)):
+    result = await session.execute(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(200))
+    return AuditLogResponse(
+        audit_logs=[
+            AuditLogOut(
+                id=item.id,
+                user_id=item.user_id,
+                action=item.action,
+                metadata=item.metadata_,
+                created_at=item.created_at,
+            )
+            for item in result.scalars().all()
+        ]
+    )
+
+
 @router.get("/subscriptions", response_model=AdminSubscriptionListResponse)
 async def list_subscriptions(session: AsyncSession = Depends(get_db_session)):
     result = await session.execute(select(VpnSubscription).order_by(VpnSubscription.created_at.desc()))
@@ -219,19 +241,36 @@ async def confirm_order(order_id: UUID, session: AsyncSession = Depends(get_db_s
     duration_days = int(custom_config.get("duration_days", order.plan.duration_days))
     device_limit = int(custom_config.get("devices_count", order.plan.device_limit))
     note = f"Order {order.id} / plan {order.plan.code}"
-    provisioned = await provision_subscription_for_user(
-        session=session,
-        user=order.user,
-        routing_mode=routing_mode,
-        duration_days=duration_days,
-        device_limit=device_limit,
-        traffic_limit_gb=None,
-        note=note,
-        plan_id=order.plan_id,
-    )
-    subscription = await get_subscription_by_token(session, provisioned.subscription.token)
-    if subscription is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Subscription was not created")
+    access_key = None
+    try:
+        provisioned = await provision_subscription_for_user(
+            session=session,
+            user=order.user,
+            routing_mode=routing_mode,
+            duration_days=duration_days,
+            device_limit=device_limit,
+            traffic_limit_gb=None,
+            note=note,
+            plan_id=order.plan_id,
+        )
+        subscription = await get_subscription_by_token(session, provisioned.subscription.token)
+        access_key = provisioned.access_key
+        if subscription is None:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Subscription was not created")
+    except Exception as exc:
+        subscription = await create_subscription(
+            session=session,
+            user_id=order.user.id,
+            original_sub_url=f"https://provisioning.failed.invalid/orders/{order.id}",
+            routing_mode=routing_mode,
+            expires_at=utc_now(),
+            device_limit=device_limit,
+            traffic_limit_gb=None,
+            note=f"{note} / provisioning failed: {exc.__class__.__name__}",
+            plan_id=order.plan_id,
+            status_value=SubscriptionStatus.PROVISIONING_FAILED,
+        )
+        await write_provisioning_failure_audit(session, order.user.id, order.id, exc)
 
     order.status = OrderStatus.PAID.value
     order.paid_at = utc_now()
@@ -242,7 +281,7 @@ async def confirm_order(order_id: UUID, session: AsyncSession = Depends(get_db_s
         ok=True,
         order=order_to_out(order),
         subscription_url=subscription_url(subscription.public_token),
-        access_key=provisioned.access_key,
+        access_key=access_key,
     )
 
 
@@ -291,6 +330,51 @@ async def extend_subscription_endpoint(
     return ExtendSubscriptionResponse(ok=True, expires_at=subscription.expires_at)
 
 
+@router.post("/subscriptions/{token}/device-limit", response_model=CreateSubscriptionResponse)
+async def change_device_limit(
+    token: str,
+    payload: ChangeDeviceLimitRequest,
+    session: AsyncSession = Depends(get_db_session),
+):
+    subscription = await require_subscription_by_token(session, token)
+    subscription.device_limit = payload.device_limit
+    await write_provisioning_event(session, "subscription_device_limit_changed", subscription.user_id, token, {"device_limit": payload.device_limit})
+    await session.commit()
+    return CreateSubscriptionResponse(ok=True, user_id=subscription.user_id, subscription=subscription_to_out(subscription))
+
+
+@router.post("/subscriptions/{token}/retry-provisioning", response_model=CreateSubscriptionResponse)
+async def retry_provisioning(token: str, session: AsyncSession = Depends(get_db_session)):
+    subscription = await require_subscription_by_token(session, token)
+    user = await session.get(User, subscription.user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if subscription.status != SubscriptionStatus.PROVISIONING_FAILED.value:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Subscription is not in provisioning_failed status")
+
+    try:
+        provisioned = await provision_subscription_for_user(
+            session=session,
+            user=user,
+            routing_mode=RoutingMode(subscription.routing_mode),
+            duration_days=30,
+            device_limit=subscription.device_limit,
+            traffic_limit_gb=subscription.traffic_limit_gb,
+            note=f"Retry for {subscription.public_token}",
+            plan_id=subscription.plan_id,
+        )
+    except Exception as exc:
+        await write_provisioning_failure_audit(session, user.id, None, exc, token)
+        await session.commit()
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Provisioning retry failed") from exc
+
+    new_subscription = await require_subscription_by_token(session, provisioned.subscription.token)
+    subscription.status = SubscriptionStatus.DISABLED.value
+    await write_provisioning_event(session, "provisioning_retry_succeeded", user.id, token, {"replacement_token": new_subscription.public_token})
+    await session.commit()
+    return CreateSubscriptionResponse(ok=True, user_id=user.id, subscription=subscription_to_out(new_subscription))
+
+
 @router.post("/subscriptions/{token}/original-sub-url", response_model=CreateSubscriptionResponse)
 async def update_original_sub_url(
     token: str,
@@ -336,3 +420,27 @@ async def create_user_access_key(user_id: UUID, session: AsyncSession = Depends(
         access_key=access_key,
         warning="This key is shown only once. Store it securely.",
     )
+
+
+async def write_provisioning_event(session: AsyncSession, action: str, user_id: UUID, token: str, metadata: dict | None = None) -> None:
+    await write_audit_log(
+        session,
+        action,
+        user_id=user_id,
+        metadata={"token_prefix": token[:9], **(metadata or {})},
+    )
+
+
+async def write_provisioning_failure_audit(
+    session: AsyncSession,
+    user_id: UUID,
+    order_id: UUID | None,
+    exc: Exception,
+    token: str | None = None,
+) -> None:
+    metadata = {"error": exc.__class__.__name__}
+    if order_id is not None:
+        metadata["order_id"] = str(order_id)
+    if token is not None:
+        metadata["token_prefix"] = token[:9]
+    await write_audit_log(session, "provisioning_failed", user_id=user_id, metadata=metadata)

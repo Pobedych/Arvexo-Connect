@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db_session
 from app.models.device import Device
+from app.models.access_key import AccessKey
+from app.models.user import User
 from app.models.telegram_account import TelegramAccount
 from app.schemas.billing import (
     CreateOrderRequest,
@@ -18,7 +20,7 @@ from app.schemas.billing import (
     PlanOut,
     SubmitPaymentRequest,
 )
-from app.schemas.cabinet import ChangeModeRequest, ChangeModeResponse
+from app.schemas.cabinet import CabinetSettingsResponse, ChangeModeRequest, ChangeModeResponse, IssueCabinetAccessKeyResponse, UpdateCabinetSettingsRequest
 from app.schemas.common import SubscriptionOut, subscription_to_out
 from app.schemas.devices import CreateDeviceRequest, CreateDeviceResponse, DeleteDeviceResponse, DevicesResponse, DeviceOut
 from app.schemas.promo import RedeemPromoCodeRequest, RedeemPromoCodeResponse
@@ -33,6 +35,7 @@ from app.services.billing_service import (
     require_user_order,
     submit_order_payment,
 )
+from app.services.access_key_service import create_access_key
 from app.services.promo_service import redeem_promo_code
 from app.services.subscription_service import (
     require_subscription_by_token,
@@ -42,6 +45,52 @@ from app.services.telegram_link_service import create_telegram_link_token, unlin
 from app.utils.security import require_cabinet_user_id
 
 router = APIRouter(prefix="/api/cabinet", tags=["cabinet"])
+
+
+@router.get("/settings", response_model=CabinetSettingsResponse)
+async def get_settings(
+    user_id: UUID = Depends(require_cabinet_user_id),
+    session: AsyncSession = Depends(get_db_session),
+):
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    active_keys = int(
+        (
+            await session.execute(
+                select(func.count()).select_from(AccessKey).where(AccessKey.user_id == user_id, AccessKey.is_active.is_(True))
+            )
+        ).scalar_one()
+    )
+    return CabinetSettingsResponse(ok=True, email=user.email, display_name=user.display_name, active_access_keys=active_keys)
+
+
+@router.post("/settings", response_model=CabinetSettingsResponse)
+async def update_settings(
+    payload: UpdateCabinetSettingsRequest,
+    user_id: UUID = Depends(require_cabinet_user_id),
+    session: AsyncSession = Depends(get_db_session),
+):
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    user.display_name = payload.display_name.strip() if payload.display_name else None
+    await session.commit()
+    return await get_settings(user_id, session)
+
+
+@router.post("/access-keys", response_model=IssueCabinetAccessKeyResponse)
+async def issue_access_key(
+    user_id: UUID = Depends(require_cabinet_user_id),
+    session: AsyncSession = Depends(get_db_session),
+):
+    access_key = await create_access_key(session, user_id)
+    await session.commit()
+    return IssueCabinetAccessKeyResponse(
+        ok=True,
+        access_key=access_key,
+        warning="This key is shown only once. Store it securely.",
+    )
 
 
 @router.get("/plans", response_model=PlansResponse)
@@ -70,7 +119,7 @@ async def create_order(
     user_id: UUID = Depends(require_cabinet_user_id),
     session: AsyncSession = Depends(get_db_session),
 ):
-    order = await create_order_for_user(session, user_id, payload.plan_code, payload.custom_config)
+    order = await create_order_for_user(session, user_id, payload.plan_code, payload.payment_method, payload.custom_config)
     await session.commit()
     order = await load_order_for_output(session, order.id)
     return CreateOrderResponse(ok=True, order=order_to_out(order))

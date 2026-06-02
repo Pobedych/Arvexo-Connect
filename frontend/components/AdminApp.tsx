@@ -42,6 +42,14 @@ type Order = {
   created_at: string;
 };
 
+type AuditLog = {
+  id: string;
+  user_id: string | null;
+  action: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
 type PromoCode = {
   id: string;
   plan_code: string;
@@ -65,10 +73,12 @@ export function AdminApp() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [createdCode, setCreatedCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [promoForm, setPromoForm] = useState({ plan_code: "family", max_redemptions: 5, code_prefix: "FAMILY", note: "Family access" });
+  const [subscriptionForm, setSubscriptionForm] = useState({ token: "", original_sub_url: "", mode: "smart", device_limit: 2, extend_days: 30 });
 
   const waitingOrders = useMemo(() => orders.filter((order) => ["pending", "waiting_confirmation"].includes(order.status)), [orders]);
 
@@ -98,18 +108,20 @@ export function AdminApp() {
     setLoading(true);
     setError("");
     try {
-      const [statsBody, usersBody, subscriptionsBody, ordersBody, promoBody] = await Promise.all([
+      const [statsBody, usersBody, subscriptionsBody, ordersBody, promoBody, auditBody] = await Promise.all([
         adminGet<Stats>("/api/admin/stats", token),
         adminGet<{ users: User[] }>("/api/admin/users", token),
         adminGet<{ subscriptions: Subscription[] }>("/api/admin/subscriptions", token),
         adminGet<{ orders: Order[] }>("/api/admin/orders", token),
-        adminGet<{ promo_codes: PromoCode[] }>("/api/admin/promo-codes", token)
+        adminGet<{ promo_codes: PromoCode[] }>("/api/admin/promo-codes", token),
+        adminGet<{ audit_logs: AuditLog[] }>("/api/admin/audit-log", token)
       ]);
       setStats(statsBody);
       setUsers(usersBody.users);
       setSubscriptions(subscriptionsBody.subscriptions);
       setOrders(ordersBody.orders);
       setPromoCodes(promoBody.promo_codes);
+      setAuditLogs(auditBody.audit_logs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить админку");
     } finally {
@@ -140,6 +152,23 @@ export function AdminApp() {
       await loadAdminData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось подтвердить order");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function subscriptionAction(path: string, body: unknown = {}) {
+    if (!subscriptionForm.token.trim()) {
+      setError("Укажите subscription token");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      await adminPost(`/api/admin/subscriptions/${subscriptionForm.token.trim()}${path}`, adminToken, body);
+      await loadAdminData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Subscription action failed");
     } finally {
       setLoading(false);
     }
@@ -248,15 +277,63 @@ export function AdminApp() {
 
         <div className="mt-6 grid gap-6 xl:grid-cols-2">
           <Panel title="Subscriptions">
+            <div className="mb-4 grid gap-3 rounded-lg border border-white/[0.08] bg-black/25 p-3 md:grid-cols-3">
+              <Field label="Token" value={subscriptionForm.token} onChange={(value) => setSubscriptionForm({ ...subscriptionForm, token: value })} />
+              <Field label="Original URL" value={subscriptionForm.original_sub_url} onChange={(value) => setSubscriptionForm({ ...subscriptionForm, original_sub_url: value })} />
+              <label className="grid gap-2 text-xs text-white/48">
+                Mode
+                <select value={subscriptionForm.mode} onChange={(event) => setSubscriptionForm({ ...subscriptionForm, mode: event.target.value })} className="h-10 rounded-lg border border-white/[0.1] bg-black px-3 text-sm text-white">
+                  <option value="smart">smart</option>
+                  <option value="privacy">privacy</option>
+                  <option value="global">global</option>
+                </select>
+              </label>
+              <label className="grid gap-2 text-xs text-white/48">
+                Device limit
+                <input value={subscriptionForm.device_limit} type="number" min={1} onChange={(event) => setSubscriptionForm({ ...subscriptionForm, device_limit: Number(event.target.value) || 1 })} className="h-10 rounded-lg border border-white/[0.1] bg-black px-3 text-sm text-white" />
+              </label>
+              <label className="grid gap-2 text-xs text-white/48">
+                Extend days
+                <input value={subscriptionForm.extend_days} type="number" min={1} onChange={(event) => setSubscriptionForm({ ...subscriptionForm, extend_days: Number(event.target.value) || 1 })} className="h-10 rounded-lg border border-white/[0.1] bg-black px-3 text-sm text-white" />
+              </label>
+              <div className="flex flex-wrap gap-2 pt-5">
+                <button onClick={() => subscriptionAction("/disable")} className="rounded-lg border border-white/[0.12] px-3 py-2 text-xs font-bold">Disable</button>
+                <button onClick={() => subscriptionAction("/extend", { days: subscriptionForm.extend_days })} className="rounded-lg border border-white/[0.12] px-3 py-2 text-xs font-bold">Extend</button>
+                <button onClick={() => subscriptionAction("/device-limit", { device_limit: subscriptionForm.device_limit })} className="rounded-lg border border-white/[0.12] px-3 py-2 text-xs font-bold">Limit</button>
+                <button onClick={() => subscriptionAction("/mode", { mode: subscriptionForm.mode })} className="rounded-lg border border-white/[0.12] px-3 py-2 text-xs font-bold">Mode</button>
+                <button onClick={() => subscriptionAction("/original-sub-url", { original_sub_url: subscriptionForm.original_sub_url })} className="rounded-lg border border-white/[0.12] px-3 py-2 text-xs font-bold">URL</button>
+                <button onClick={() => subscriptionAction("/retry-provisioning")} className="rounded-lg bg-[#ef233c] px-3 py-2 text-xs font-bold">Retry</button>
+              </div>
+            </div>
             <Table
               headers={["Token", "Status", "Mode", "Days", "Devices"]}
-              rows={subscriptions.slice(0, 12).map((sub) => [sub.token, sub.status, sub.routing_mode, sub.days_left ?? "no limit", sub.device_limit])}
+              rows={subscriptions.slice(0, 12).map((sub) => [
+                <button key={sub.token} onClick={() => setSubscriptionForm({ ...subscriptionForm, token: sub.token, mode: sub.routing_mode, device_limit: sub.device_limit })} className="text-left font-bold text-white">{sub.token}</button>,
+                sub.status,
+                sub.routing_mode,
+                sub.days_left ?? "no limit",
+                sub.device_limit
+              ])}
             />
           </Panel>
           <Panel title="Users">
             <Table
               headers={["Name", "Status", "Created"]}
               rows={users.slice(0, 12).map((user) => [user.display_name || user.id.slice(0, 8), user.status, new Date(user.created_at).toLocaleDateString()])}
+            />
+          </Panel>
+        </div>
+
+        <div className="mt-6">
+          <Panel title="Audit log">
+            <Table
+              headers={["Action", "User", "Metadata", "Created"]}
+              rows={auditLogs.slice(0, 20).map((item) => [
+                item.action,
+                item.user_id ? item.user_id.slice(0, 8) : "",
+                JSON.stringify(item.metadata || {}),
+                new Date(item.created_at).toLocaleString()
+              ])}
             />
           </Panel>
         </div>

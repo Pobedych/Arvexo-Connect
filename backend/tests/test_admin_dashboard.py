@@ -9,6 +9,8 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db_session
 from app.main import app
 from app.models.plan import Plan
+from app.services.subscription_service import create_subscription
+from app.services.user_service import create_user
 
 
 @pytest_asyncio.fixture
@@ -82,3 +84,32 @@ async def test_admin_stats_requires_token(client):
     response = await client.get("/api/admin/stats")
 
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_audit_log_requires_token(client):
+    response = await client.get("/api/admin/audit-log")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_device_limit_updates_subscription(client, session_factory):
+    async with session_factory() as session:
+        user = await create_user(session, display_name="Limit User")
+        subscription = await create_subscription(
+            session=session,
+            user_id=user.id,
+            original_sub_url="https://xui.example/sub",
+            public_token="ARVX-LIMIT-TEST",
+        )
+        await session.commit()
+
+    response = await client.post(
+        "/api/admin/subscriptions/ARVX-LIMIT-TEST/device-limit",
+        headers={"X-Admin-Token": "change_me_admin_token"},
+        json={"device_limit": 9},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["subscription"]["device_limit"] == 9

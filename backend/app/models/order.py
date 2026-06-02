@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, JSON, Numeric, String
+from sqlalchemy import DateTime, ForeignKey, JSON, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -27,6 +27,12 @@ class Order(TimestampMixin, Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(12), default="USDT", nullable=False)
     payment_method: Mapped[str] = mapped_column(String(64), default=PaymentMethod.CRYPTO_MANUAL.value, nullable=False)
+    provider: Mapped[Optional[str]] = mapped_column(String(64))
+    provider_payment_id: Mapped[Optional[str]] = mapped_column(String(256))
+    payment_url: Mapped[Optional[str]] = mapped_column(Text)
+    qr_payload: Mapped[Optional[str]] = mapped_column(Text)
+    qr_image_base64: Mapped[Optional[str]] = mapped_column(Text)
+    payment_recipient: Mapped[Optional[str]] = mapped_column(Text)
     crypto_network: Mapped[Optional[str]] = mapped_column(String(64))
     crypto_address: Mapped[Optional[str]] = mapped_column(String(256))
     crypto_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 8))

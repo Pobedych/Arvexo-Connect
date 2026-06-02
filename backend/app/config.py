@@ -24,7 +24,14 @@ class Settings(BaseSettings):
     jwt_expires_minutes: int = 60
     crypto_payment_network: str = "TRC20"
     crypto_payment_address: str | None = None
+    sbp_payment_recipient: str | None = None
+    sbp_payment_url: str | None = None
+    sbp_qr_payload: str | None = None
+    sbp_qr_image_base64: str | None = None
     telegram_bot_url: str = "https://t.me/ARVEXO_BOT"
+    login_rate_limit_per_minute: int = 1200
+    subscription_rate_limit_per_minute: int = 1200
+    admin_rate_limit_per_minute: int = 1200
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -32,8 +39,20 @@ class Settings(BaseSettings):
     )
 
     def model_post_init(self, __context) -> None:
-        if self.app_env == "production" and not self.jwt_secret:
-            raise ValueError("JWT_SECRET must be set in production")
+        if self.app_env == "production":
+            required = {
+                "JWT_SECRET": self.jwt_secret,
+                "ADMIN_TOKEN": self.admin_token,
+                "BOT_INTERNAL_TOKEN": self.bot_internal_token,
+            }
+            defaults = {
+                "JWT_SECRET": {"", "change_me_jwt_secret", "development_jwt_secret_change_me"},
+                "ADMIN_TOKEN": {"", "change_me_admin_token"},
+                "BOT_INTERNAL_TOKEN": {"", "change_me_bot_token"},
+            }
+            for name, value in required.items():
+                if not value or value in defaults[name]:
+                    raise ValueError(f"{name} must be set to a non-default value in production")
 
     @property
     def cors_origins_list(self) -> list[str]:

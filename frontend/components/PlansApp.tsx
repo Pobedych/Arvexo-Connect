@@ -20,6 +20,8 @@ type CustomConfig = {
   default_mode: "smart" | "privacy" | "global";
   iphone_stable: boolean;
   priority_support: boolean;
+  backup_profiles: boolean;
+  custom_routing_ready: boolean;
 };
 
 const JWT_STORAGE_KEY = "arvexo_cabinet_jwt";
@@ -32,8 +34,11 @@ export function PlansApp() {
     duration_days: 30,
     default_mode: "smart",
     iphone_stable: false,
-    priority_support: false
+    priority_support: false,
+    backup_profiles: false,
+    custom_routing_ready: false
   });
+  const [paymentMethod, setPaymentMethod] = useState<"crypto_manual" | "sbp_manual">("crypto_manual");
   const [quote, setQuote] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -76,6 +81,7 @@ export function PlansApp() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
         body: JSON.stringify({
           plan_code: selected,
+          payment_method: paymentMethod,
           ...(selected === "custom" ? { custom_config: custom } : {})
         })
       });
@@ -135,10 +141,20 @@ export function PlansApp() {
               <div className="grid gap-3 pt-7">
                 <Toggle label="iPhone Stable" checked={custom.iphone_stable} onChange={(value) => setCustom({ ...custom, iphone_stable: value })} />
                 <Toggle label="Priority support" checked={custom.priority_support} onChange={(value) => setCustom({ ...custom, priority_support: value })} />
+                <Toggle label="Резервные профили" checked={custom.backup_profiles} onChange={(value) => setCustom({ ...custom, backup_profiles: value })} />
+                <Toggle label="Custom routing ready" checked={custom.custom_routing_ready} onChange={(value) => setCustom({ ...custom, custom_routing_ready: value })} />
               </div>
             </div>
           </div>
         )}
+
+        <div className="mt-8 rounded-lg border border-white/[0.1] bg-[#101010] p-6">
+          <h2 className="text-xl font-semibold">Метод оплаты</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <PaymentButton active={paymentMethod === "crypto_manual"} title="Crypto manual" text="USDT, сеть и адрес из настроек сервиса." onClick={() => setPaymentMethod("crypto_manual")} />
+            <PaymentButton active={paymentMethod === "sbp_manual"} title="SBP manual" text="Ручная проверка перевода по назначению платежа." onClick={() => setPaymentMethod("sbp_manual")} />
+          </div>
+        </div>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
           <button disabled={loading || !selectedPlan} onClick={createOrder} className="min-h-12 rounded-lg bg-[#ef233c] px-6 text-sm font-bold disabled:opacity-50">
@@ -168,6 +184,19 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
       {label}
     </label>
+  );
+}
+
+function PaymentButton({ active, title, text, onClick }: { active: boolean; title: string; text: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border p-4 text-left transition ${active ? "border-[#ef233c] bg-[#ef233c]/10" : "border-white/[0.1] bg-black/25 hover:border-white/25"}`}
+    >
+      <span className="block text-base font-bold">{title}</span>
+      <span className="mt-2 block text-sm leading-5 text-white/56">{text}</span>
+    </button>
   );
 }
 

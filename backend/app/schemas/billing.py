@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.enums import RoutingMode
+from app.enums import PaymentMethod, RoutingMode
 
 
 class PlanOut(BaseModel):
@@ -32,6 +32,8 @@ class CustomPlanConfig(BaseModel):
     default_mode: RoutingMode = RoutingMode.SMART
     iphone_stable: bool = False
     priority_support: bool = False
+    backup_profiles: bool = False
+    custom_routing_ready: bool = False
 
 
 class CustomPlanQuoteResponse(BaseModel):
@@ -43,6 +45,7 @@ class CustomPlanQuoteResponse(BaseModel):
 
 class CreateOrderRequest(BaseModel):
     plan_code: str = Field(min_length=1, max_length=64)
+    payment_method: PaymentMethod = PaymentMethod.CRYPTO_MANUAL
     custom_config: CustomPlanConfig | None = None
 
 
@@ -58,6 +61,12 @@ class OrderOut(BaseModel):
     amount: Decimal
     currency: str
     payment_method: str
+    provider: str | None
+    provider_payment_id: str | None
+    payment_url: str | None
+    qr_payload: str | None
+    qr_image_base64: str | None
+    payment_recipient: str | None
     crypto_network: str | None
     crypto_address: str | None
     crypto_amount: Decimal | None

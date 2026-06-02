@@ -12,6 +12,7 @@ from app.models.vpn_subscription import VpnSubscription
 from app.services.device_service import record_raw_subscription_device
 from app.services.subscription_proxy import build_subscription_headers, proxy_subscription
 from app.services.subscription_service import ensure_subscription_accessible, require_subscription_by_token
+from app.utils.rate_limit import enforce_rate_limit
 
 router = APIRouter(tags=["public-subscription"])
 
@@ -26,6 +27,7 @@ async def get_public_subscription(
     subscription = await require_public_subscription(session, token)
     ensure_subscription_accessible(subscription)
     if format == "raw" or not wants_html(request):
+        await enforce_rate_limit(request, "subscription_raw", settings.subscription_rate_limit_per_minute)
         await record_raw_subscription_device(session, subscription, request)
         response = await proxy_subscription(session, subscription)
         await session.commit()
@@ -39,7 +41,9 @@ async def get_public_subscription(
 
 async def require_public_subscription(session: AsyncSession, token: str) -> VpnSubscription:
     result = await session.execute(
-        select(VpnSubscription).options(selectinload(VpnSubscription.plan)).where(VpnSubscription.public_token == token)
+        select(VpnSubscription)
+        .options(selectinload(VpnSubscription.plan), selectinload(VpnSubscription.devices))
+        .where(VpnSubscription.public_token == token)
     )
     subscription = result.scalar_one_or_none()
     if subscription is None:
@@ -60,9 +64,17 @@ def wants_html(request: Request) -> bool:
 def render_subscription_html(subscription: VpnSubscription) -> str:
     plan_name = subscription.plan.name if subscription.plan else "Arvexo Connect"
     raw_url = f"{settings.public_sub_base_url.rstrip('/')}/u/{quote(subscription.public_token)}?format=raw"
+    cabinet_url = f"{settings.public_frontend_base_url.rstrip('/')}/cabinet/subscription/{quote(subscription.public_token)}"
+    support_url = f"{settings.public_frontend_base_url.rstrip('/')}/cabinet/support"
+    telegram_url = settings.telegram_bot_url.rstrip("/")
     expires = subscription.expires_at.strftime("%d.%m.%Y") if subscription.expires_at else "без срока"
     days = "без срока" if subscription.expires_at is None else expires
     qr_src = f"https://api.qrserver.com/v1/create-qr-code/?size=420x420&data={quote(raw_url, safe='')}"
+    devices = [device for device in subscription.devices if device.is_active]
+    device_items = "".join(
+        f"""<li><strong>{escape(device.name or "Устройство")}</strong><span>{escape(device.type or "other")}</span></li>"""
+        for device in devices
+    ) or "<li><strong>Устройства пока не добавлены</strong><span>Добавьте их в кабинете</span></li>"
     return f"""<!doctype html>
 <html lang="ru">
 <head>
@@ -81,9 +93,13 @@ def render_subscription_html(subscription: VpnSubscription) -> str:
     .value {{ margin-top:8px; font-weight:700; word-break:break-word; }}
     .actions {{ display:flex; flex-wrap:wrap; gap:10px; margin-top:24px; }}
     a, button {{ min-height:44px; display:inline-flex; align-items:center; border-radius:10px; padding:0 16px; font-weight:800; font-size:14px; text-decoration:none; }}
-    a.primary {{ background:#ef233c; color:white; }}
+    a.primary, button.primary {{ background:#ef233c; color:white; border:0; cursor:pointer; }}
     a.secondary {{ border:1px solid rgba(255,255,255,.12); color:white; }}
     img {{ width:min(320px,100%); background:white; padding:14px; border-radius:12px; margin-top:24px; }}
+    ul {{ list-style:none; padding:0; margin:18px 0 0; display:grid; gap:10px; }}
+    li {{ display:flex; justify-content:space-between; gap:12px; border:1px solid rgba(255,255,255,.08); background:#00000040; border-radius:10px; padding:12px 14px; }}
+    li span {{ color:rgba(255,255,255,.5); }}
+    .notice {{ margin-top:18px; color:rgba(255,255,255,.62); font-size:14px; line-height:1.6; }}
   </style>
 </head>
 <body>
@@ -93,17 +109,25 @@ def render_subscription_html(subscription: VpnSubscription) -> str:
       <h1>{escape(plan_name)}</h1>
       <div class="grid">
         <div class="item"><div class="label">Статус</div><div class="value">{escape(subscription.status)}</div></div>
+        <div class="item"><div class="label">Тариф</div><div class="value">{escape(plan_name)}</div></div>
         <div class="item"><div class="label">Режим</div><div class="value">{escape(subscription.routing_mode)}</div></div>
         <div class="item"><div class="label">Истекает</div><div class="value">{escape(days)}</div></div>
-        <div class="item"><div class="label">Устройства</div><div class="value">до {subscription.device_limit}</div></div>
+        <div class="item"><div class="label">Устройства</div><div class="value">{len(devices)} / {subscription.device_limit}</div></div>
       </div>
       <img alt="Subscription QR" src="{qr_src}" />
+      <p class="notice">Импортируйте raw subscription в Happ, V2RayTun, Hiddify, NekoBox, v2rayNG или Nekoray. Если меняли режим, обновите подписку в приложении.</p>
       <div class="actions">
         <a class="primary" href="{raw_url}">Raw subscription</a>
-        <a class="secondary" href="/instructions/iphone">Инструкция iPhone</a>
-        <a class="secondary" href="/instructions/android">Инструкция Android</a>
-        <a class="secondary" href="/cabinet">Личный кабинет</a>
+        <button class="primary" type="button" onclick="navigator.clipboard.writeText('{raw_url}')">Copy raw</button>
+        <a class="secondary" href="{settings.public_frontend_base_url.rstrip('/')}/instructions/iphone">Инструкция iPhone</a>
+        <a class="secondary" href="{settings.public_frontend_base_url.rstrip('/')}/instructions/android">Инструкция Android</a>
+        <a class="secondary" href="{settings.public_frontend_base_url.rstrip('/')}/instructions/windows">Инструкция Windows</a>
+        <a class="secondary" href="{cabinet_url}">Личный кабинет</a>
+        <a class="secondary" href="{telegram_url}">Telegram</a>
+        <a class="secondary" href="{support_url}">Поддержка</a>
       </div>
+      <h2 style="margin:28px 0 0;font-size:20px;">Устройства</h2>
+      <ul>{device_items}</ul>
     </section>
   </main>
 </body>

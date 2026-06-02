@@ -108,6 +108,46 @@ async def test_create_order_and_submit_payment(client, session_factory):
 
 
 @pytest.mark.asyncio
+async def test_create_sbp_manual_order(client, session_factory):
+    await seed_plans(session_factory)
+    jwt = await register(client)
+
+    response = await client.post(
+        "/api/cabinet/orders",
+        headers={"Authorization": f"Bearer {jwt}"},
+        json={"plan_code": "base", "payment_method": "sbp_manual"},
+    )
+
+    assert response.status_code == 201
+    order = response.json()["order"]
+    assert order["payment_method"] == "sbp_manual"
+    assert order["provider"] == "sbp_manual"
+    assert order["crypto_address"] is None
+
+
+@pytest.mark.asyncio
+async def test_custom_quote_accepts_all_v1_fields(client, session_factory):
+    await seed_plans(session_factory)
+
+    response = await client.post(
+        "/api/cabinet/custom-plan/quote",
+        json={
+            "devices_count": 5,
+            "duration_days": 90,
+            "default_mode": "global",
+            "iphone_stable": True,
+            "priority_support": True,
+            "backup_profiles": True,
+            "custom_routing_ready": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["features"]["backup_profiles"] is True
+    assert response.json()["features"]["custom_routing_ready"] is True
+
+
+@pytest.mark.asyncio
 async def test_admin_confirm_order_creates_subscription(client, session_factory, monkeypatch):
     await seed_plans(session_factory)
     jwt = await register(client)
@@ -137,3 +177,30 @@ async def test_admin_confirm_order_creates_subscription(client, session_factory,
     assert payload["order"]["status"] == "paid"
     assert payload["order"]["subscription_token"]
     assert payload["subscription_url"].endswith(f"/u/{payload['order']['subscription_token']}")
+
+
+@pytest.mark.asyncio
+async def test_admin_confirm_order_marks_provisioning_failed_when_xui_fails(client, session_factory, monkeypatch):
+    await seed_plans(session_factory)
+    jwt = await register(client)
+    response = await client.post(
+        "/api/cabinet/orders",
+        headers={"Authorization": f"Bearer {jwt}"},
+        json={"plan_code": "base"},
+    )
+    order_id = response.json()["order"]["id"]
+
+    class FailingXuiClient:
+        async def add_client(self, public_token, telegram_id, expires_at, traffic_limit_gb, inbound_ids=None):
+            raise RuntimeError("xui unavailable")
+
+    monkeypatch.setattr("app.services.provisioning_service.XuiClient", FailingXuiClient)
+
+    response = await client.post(f"/api/admin/orders/{order_id}/confirm", headers={"X-Admin-Token": "change_me_admin_token"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["order"]["status"] == "paid"
+    subscriptions = await client.get("/api/admin/subscriptions", headers={"X-Admin-Token": "change_me_admin_token"})
+    assert subscriptions.status_code == 200
+    assert subscriptions.json()["subscriptions"][0]["status"] == "provisioning_failed"

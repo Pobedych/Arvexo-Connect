@@ -44,3 +44,14 @@ class TelegramTrialProvisionRequest(BaseModel):
 class TelegramTrialProvisionResponse(BaseModel):
     ok: bool
     subscription: SubscriptionOut
+
+
+class TelegramNotificationRequest(BaseModel):
+    telegram_id: int
+    event: str
+    message: str
+    token: str | None = None
+
+
+class TelegramNotificationResponse(BaseModel):
+    ok: bool

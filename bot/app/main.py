@@ -10,6 +10,7 @@ from app.backend import BackendClient
 from app.config import settings
 
 backend = BackendClient()
+pending_device_add: dict[int, str] = {}
 
 
 def main_menu() -> InlineKeyboardMarkup:
@@ -25,12 +26,17 @@ def main_menu() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(text="Сменить режим", callback_data="modes"),
-                InlineKeyboardButton(text="Обновить", callback_data="refresh"),
+                InlineKeyboardButton(text="Устройства", callback_data="devices"),
             ],
             [
                 InlineKeyboardButton(text="Инструкция iPhone", callback_data="instruction_iphone"),
                 InlineKeyboardButton(text="Инструкция Android", callback_data="instruction_android"),
             ],
+            [
+                InlineKeyboardButton(text="Инструкция Windows", callback_data="instruction_windows"),
+                InlineKeyboardButton(text="Не работает", callback_data="repair"),
+            ],
+            [InlineKeyboardButton(text="Обновить", callback_data="refresh")],
             [InlineKeyboardButton(text="Получить тестовую подписку", callback_data="trial")],
             [InlineKeyboardButton(text="Поддержка", url=settings.support_url)],
         ]
@@ -46,6 +52,30 @@ def mode_keyboard(token: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Назад", callback_data="menu")],
         ]
     )
+
+
+def repair_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Telegram не работает", callback_data="repair_case:telegram")],
+            [InlineKeyboardButton(text="Всё не открывается", callback_data="repair_case:offline")],
+            [InlineKeyboardButton(text="Медленно", callback_data="repair_case:slow")],
+            [InlineKeyboardButton(text="iPhone: Соединение...", callback_data="repair_case:iphone")],
+            [InlineKeyboardButton(text="Ozon/банк не открывается", callback_data="repair_case:local")],
+            [InlineKeyboardButton(text="Подписка не импортируется", callback_data="repair_case:import")],
+            [InlineKeyboardButton(text="Назад", callback_data="menu")],
+        ]
+    )
+
+
+def device_keyboard(token: str, devices: list[dict]) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text="Добавить устройство", callback_data=f"device_add:{token}")]]
+    rows.extend(
+        [InlineKeyboardButton(text=f"Удалить {device.get('name') or 'устройство'}", callback_data=f"device_del:{token}:{device['id']}")]
+        for device in devices[:8]
+    )
+    rows.append([InlineKeyboardButton(text="Назад", callback_data="menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 async def first_subscription(telegram_id: int) -> dict | None:
@@ -74,6 +104,29 @@ def subscription_text(subscription: dict) -> str:
         "Raw import:\n"
         f"{raw_url(subscription)}"
     )
+
+
+def repair_text(case: str) -> str:
+    steps = {
+        "telegram": ["Проверьте, выключен ли proxy внутри Telegram.", "Обновите подписку.", "Попробуйте режим Privacy.", "Если не помогло — напишите в поддержку."],
+        "offline": ["Проверьте интернет без VPN.", "Обновите подписку.", "Выберите другой профиль.", "Проверьте срок подписки."],
+        "slow": ["Смените профиль.", "Попробуйте Smart Russia.", "Проверьте фоновые загрузки.", "Напишите в поддержку, если скорость не восстановилась."],
+        "iphone": ["Используйте Happ или V2RayTun.", "Выберите Reality-профиль.", "Не используйте Hysteria как основной профиль.", "Обновите подписку."],
+        "local": ["Включите Smart Russia.", "Обновите подписку.", "Перезапустите VPN-клиент.", "Если не помогло — напишите в поддержку."],
+        "import": ["Откройте raw subscription link.", "Скопируйте ссылку полностью.", "Добавьте подписку заново.", "Проверьте поддержку subscription import."],
+    }.get(case, ["Обновите подписку.", "Смените режим.", "Проверьте инструкцию.", "Напишите в поддержку."])
+    return "Arvexo Repair\n\n" + "\n".join(f"{index + 1}. {step}" for index, step in enumerate(steps))
+
+
+async def send_devices(message: Message, telegram_id: int) -> None:
+    subscription = await first_subscription(telegram_id)
+    if not subscription:
+        await message.answer("Сначала получите подписку.", reply_markup=main_menu())
+        return
+    devices = await backend.devices(telegram_id, subscription["token"])
+    text = f"Устройства: {len(devices)}/{subscription.get('device_limit', 3)}\n\n"
+    text += "\n".join(f"- {device.get('name') or 'Устройство'} ({device.get('type') or 'other'})" for device in devices) or "Список пуст."
+    await message.answer(text, reply_markup=device_keyboard(subscription["token"], devices))
 
 
 async def send_access(message: Message, telegram_id: int) -> None:
@@ -160,6 +213,17 @@ async def main() -> None:
         )
         await message.answer("Arvexo Connect\n\nВыберите действие:", reply_markup=main_menu())
 
+    @dp.message()
+    async def free_text(message: Message) -> None:
+        token = pending_device_add.pop(message.from_user.id, None)
+        if not token:
+            return
+        try:
+            await backend.add_device(message.from_user.id, token, message.text.strip()[:120], "other")
+            await message.answer("Устройство добавлено.", reply_markup=main_menu())
+        except Exception:
+            await message.answer("Не удалось добавить устройство. Возможно, лимит исчерпан.", reply_markup=main_menu())
+
     @dp.callback_query(F.data == "access")
     async def access(callback: CallbackQuery) -> None:
         await callback.answer()
@@ -231,6 +295,31 @@ async def main() -> None:
             return
         await callback.message.answer("Выберите режим:", reply_markup=mode_keyboard(subscription["token"]))
 
+    @dp.callback_query(F.data == "devices")
+    async def devices(callback: CallbackQuery) -> None:
+        await callback.answer()
+        try:
+            await send_devices(callback.message, callback.from_user.id)
+        except Exception:
+            await callback.message.answer("Не удалось загрузить устройства.", reply_markup=main_menu())
+
+    @dp.callback_query(F.data.startswith("device_add:"))
+    async def device_add(callback: CallbackQuery) -> None:
+        await callback.answer()
+        _, token = callback.data.split(":", 1)
+        pending_device_add[callback.from_user.id] = token
+        await callback.message.answer("Отправьте название устройства одним сообщением.")
+
+    @dp.callback_query(F.data.startswith("device_del:"))
+    async def device_del(callback: CallbackQuery) -> None:
+        await callback.answer()
+        try:
+            _, token, device_id = callback.data.split(":")
+            await backend.delete_device(callback.from_user.id, token, device_id)
+            await callback.message.answer("Устройство удалено.", reply_markup=main_menu())
+        except Exception:
+            await callback.message.answer("Не удалось удалить устройство.", reply_markup=main_menu())
+
     @dp.callback_query(F.data.startswith("mode:"))
     async def change_mode(callback: CallbackQuery) -> None:
         await callback.answer()
@@ -249,9 +338,22 @@ async def main() -> None:
         await callback.answer()
         if callback.data.endswith("iphone"):
             text = "iPhone:\n1. Установите Happ / V2RayTun / Streisand.\n2. Скопируйте subscription-ссылку.\n3. Добавьте подписку.\n4. Нажмите обновить.\n5. Подключитесь."
-        else:
+        elif callback.data.endswith("android"):
             text = "Android:\n1. Установите Hiddify / v2rayNG / NekoBox.\n2. Импортируйте subscription-ссылку.\n3. Обновите подписку.\n4. Выберите профиль.\n5. Подключитесь."
+        else:
+            text = "Windows:\n1. Установите Hiddify или Nekoray.\n2. Скопируйте subscription-ссылку.\n3. Добавьте новую подписку.\n4. Обновите профили.\n5. Подключитесь."
         await callback.message.answer(text, reply_markup=main_menu())
+
+    @dp.callback_query(F.data == "repair")
+    async def repair(callback: CallbackQuery) -> None:
+        await callback.answer()
+        await callback.message.answer("Выберите проблему:", reply_markup=repair_keyboard())
+
+    @dp.callback_query(F.data.startswith("repair_case:"))
+    async def repair_case(callback: CallbackQuery) -> None:
+        await callback.answer()
+        _, case = callback.data.split(":", 1)
+        await callback.message.answer(repair_text(case), reply_markup=main_menu())
 
     await dp.start_polling(bot)
 

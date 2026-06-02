@@ -1,22 +1,26 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db_session
+from app.models.user import User
 from app.models.vpn_subscription import VpnSubscription
 from app.schemas.auth import AccessKeyRequest, AccessKeyResponse, AccountLoginRequest, AccountRegisterRequest
 from app.schemas.common import subscription_to_out
 from app.services.access_key_service import authenticate_access_key
 from app.services.user_service import authenticate_account_user, create_account_user, get_user_by_email
 from app.utils.security import create_access_token, require_cabinet_user_id
+from app.utils.rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=AccessKeyResponse, status_code=status.HTTP_201_CREATED)
-async def register_account(payload: AccountRegisterRequest, session: AsyncSession = Depends(get_db_session)):
+async def register_account(payload: AccountRegisterRequest, request: Request, session: AsyncSession = Depends(get_db_session)):
+    await enforce_rate_limit(request, "auth", settings.login_rate_limit_per_minute)
     existing_user = await get_user_by_email(session, payload.email)
     if existing_user is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account already exists")
@@ -32,7 +36,8 @@ async def register_account(payload: AccountRegisterRequest, session: AsyncSessio
 
 
 @router.post("/login", response_model=AccessKeyResponse)
-async def login_account(payload: AccountLoginRequest, session: AsyncSession = Depends(get_db_session)):
+async def login_account(payload: AccountLoginRequest, request: Request, session: AsyncSession = Depends(get_db_session)):
+    await enforce_rate_limit(request, "auth", settings.login_rate_limit_per_minute)
     user = await authenticate_account_user(session, payload.email, payload.password)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
@@ -42,14 +47,16 @@ async def login_account(payload: AccountLoginRequest, session: AsyncSession = De
 
 
 @router.post("/access-key", response_model=AccessKeyResponse)
-async def authenticate_by_access_key(payload: AccessKeyRequest, session: AsyncSession = Depends(get_db_session)):
+async def authenticate_by_access_key(payload: AccessKeyRequest, request: Request, session: AsyncSession = Depends(get_db_session)):
+    await enforce_rate_limit(request, "auth", settings.login_rate_limit_per_minute)
     authenticated = await authenticate_access_key(session, payload.access_key)
     if authenticated is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid access key")
 
     user_id, subscriptions = authenticated
     await session.commit()
-    return build_access_response(user_id, subscriptions)
+    user = await session.get(User, UUID(user_id))
+    return build_access_response(user_id, subscriptions, user)
 
 
 @router.get("/me", response_model=AccessKeyResponse)
@@ -63,13 +70,16 @@ async def get_current_account(
 async def build_auth_response(session: AsyncSession, user_id: str) -> AccessKeyResponse:
     user_uuid = UUID(user_id)
     result = await session.execute(select(VpnSubscription).where(VpnSubscription.user_id == user_uuid))
-    return build_access_response(str(user_uuid), list(result.scalars().all()))
+    user = await session.get(User, user_uuid)
+    return build_access_response(str(user_uuid), list(result.scalars().all()), user)
 
 
-def build_access_response(user_id: str, subscriptions: list[VpnSubscription]) -> AccessKeyResponse:
+def build_access_response(user_id: str, subscriptions: list[VpnSubscription], user: User | None = None) -> AccessKeyResponse:
     return AccessKeyResponse(
         ok=True,
         user_id=user_id,
+        email=user.email if user else None,
+        display_name=user.display_name if user else None,
         access_token=create_access_token(user_id),
         subscriptions=[subscription_to_out(subscription) for subscription in subscriptions],
     )

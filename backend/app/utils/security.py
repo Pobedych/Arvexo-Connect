@@ -6,9 +6,10 @@ import secrets
 from datetime import timedelta
 from uuid import UUID
 
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, Request, status
 
 from app.config import settings
+from app.utils.rate_limit import enforce_rate_limit
 from app.utils.time import utc_now
 
 
@@ -125,7 +126,8 @@ async def require_cabinet_user_id(authorization: str | None = Header(default=Non
     return verify_access_token(token)
 
 
-async def require_admin_token(x_admin_token: str | None = Header(default=None)) -> None:
+async def require_admin_token(request: Request, x_admin_token: str | None = Header(default=None)) -> None:
+    await enforce_rate_limit(request, "admin", settings.admin_rate_limit_per_minute)
     if not x_admin_token or not constant_time_equal(x_admin_token, settings.admin_token):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin token")
 

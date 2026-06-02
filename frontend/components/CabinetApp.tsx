@@ -19,6 +19,8 @@ type Subscription = {
 type AuthResponse = {
   ok: boolean;
   user_id: string;
+  email: string | null;
+  display_name: string | null;
   access_token: string;
   token_type: "bearer";
   subscriptions: Subscription[];
@@ -460,6 +462,11 @@ export function CabinetApp() {
               )}
               {subscription && (
                 <>
+                  {subscription.status === "provisioning_failed" && (
+                    <p className="mt-5 rounded-2xl border border-[#ef233c]/30 bg-[#ef233c]/10 p-4 text-sm text-[#ffb3bb]">
+                      Доступ готовится, поддержка уже уведомлена.
+                    </p>
+                  )}
                   <div className="mt-6 grid gap-3 sm:grid-cols-2">
                     <Info label="Статус" value={subscription.status} />
                     <Info label="Режим" value={subscription.routing_mode} />
@@ -472,6 +479,12 @@ export function CabinetApp() {
                     <button onClick={copyLink} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#ef233c] px-4 py-3 text-sm font-bold">
                       <Copy className="h-4 w-4" /> Скопировать ссылку
                     </button>
+                  </div>
+                  <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <QuickAction href={`/cabinet/subscription/${subscription.token}`} label="Открыть подписку" />
+                    <QuickAction href="/cabinet/orders" label="Заказы" />
+                    <QuickAction href="/cabinet/settings" label="Настройки" />
+                    <QuickAction href="/cabinet/support" label="Не работает" />
                   </div>
                   <div className="mt-6 grid gap-3 md:grid-cols-3">
                     {modes.map((mode) => (
@@ -615,6 +628,14 @@ function InstructionLink({ href, label }: { href: string; label: string }) {
     <Link href={href} className="flex items-center justify-between rounded-2xl border border-white/[0.08] bg-black/25 p-4 text-sm font-bold">
       {label}
       <Check className="h-4 w-4 text-[#ff2b3a]" />
+    </Link>
+  );
+}
+
+function QuickAction({ href, label }: { href: string; label: string }) {
+  return (
+    <Link href={href} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-white/[0.1] bg-black/25 px-3 text-center text-sm font-bold hover:border-[#ef233c]/45">
+      {label}
     </Link>
   );
 }

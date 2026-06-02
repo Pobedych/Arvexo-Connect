@@ -48,6 +48,22 @@ class ExtendSubscriptionResponse(BaseModel):
     expires_at: datetime
 
 
+class ChangeDeviceLimitRequest(BaseModel):
+    device_limit: int = Field(ge=1, le=100)
+
+
+class AuditLogOut(BaseModel):
+    id: UUID
+    user_id: UUID | None
+    action: str
+    metadata: dict | None = None
+    created_at: datetime
+
+
+class AuditLogResponse(BaseModel):
+    audit_logs: list[AuditLogOut]
+
+
 class CreateAccessKeyResponse(BaseModel):
     ok: bool
     access_key: str

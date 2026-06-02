@@ -68,6 +68,15 @@ ADMIN_TOKEN=strong_secret
 BOT_INTERNAL_TOKEN=strong_secret
 JWT_SECRET=strong_secret
 JWT_EXPIRES_MINUTES=60
+CRYPTO_PAYMENT_NETWORK=TRC20
+CRYPTO_PAYMENT_ADDRESS=change_me_crypto_address
+SBP_PAYMENT_RECIPIENT="ИП / получатель"
+SBP_PAYMENT_URL=
+SBP_QR_PAYLOAD=
+SBP_QR_IMAGE_BASE64=
+LOGIN_RATE_LIMIT_PER_MINUTE=12
+SUBSCRIPTION_RATE_LIMIT_PER_MINUTE=120
+ADMIN_RATE_LIMIT_PER_MINUTE=180
 XUI_API_TOKEN=token_from_3x_ui
 XUI_BASE_URL=https://monitor.vpn.arvexo.ru:32145/Lb9BYg8zvNRCZMPeon
 XUI_SUB_BASE_URL=https://monitor.vpn.arvexo.ru:2096
@@ -162,7 +171,7 @@ Authorization: Bearer <access_token>
 
 The cabinet shows subscription status, QR code, copy button, instructions, and routing mode selector after a subscription is issued. A newly registered Arvexo Account can exist without a VPN subscription yet. The frontend stores the JWT in `localStorage` for MVP only; replace it with an httpOnly cookie session before a hardened production release.
 
-Plans and manual crypto orders:
+Plans and manual crypto/SBP orders:
 
 ```bash
 JWT="<access_token>"
@@ -176,7 +185,12 @@ curl -X POST http://127.0.0.1:8012/api/cabinet/custom-plan/quote \
 curl -X POST http://127.0.0.1:8012/api/cabinet/orders \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $JWT" \
-  -d '{"plan_code":"base"}'
+  -d '{"plan_code":"base","payment_method":"crypto_manual"}'
+
+curl -X POST http://127.0.0.1:8012/api/cabinet/orders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -d '{"plan_code":"family","payment_method":"sbp_manual"}'
 
 curl -X POST http://127.0.0.1:8012/api/cabinet/orders/<order_id>/payment \
   -H "Content-Type: application/json" \
@@ -296,6 +310,88 @@ curl -X POST http://127.0.0.1:8012/api/telegram/users/upsert \
   -d '{"telegram_id":123456789,"username":"alex","first_name":"Alex"}'
 ```
 
+Telegram device management:
+
+```bash
+curl "http://127.0.0.1:8012/api/telegram/subscriptions/<token>/devices?telegram_id=123456789" \
+  -H "X-Bot-Token: change_me_bot_token"
+
+curl -X POST "http://127.0.0.1:8012/api/telegram/subscriptions/<token>/devices?telegram_id=123456789" \
+  -H "Content-Type: application/json" \
+  -H "X-Bot-Token: change_me_bot_token" \
+  -d '{"name":"iPhone Alex","type":"iphone"}'
+```
+
+## Admin Operations
+
+```bash
+curl http://127.0.0.1:8012/api/admin/audit-log \
+  -H "X-Admin-Token: change_me_admin_token"
+
+curl -X POST http://127.0.0.1:8012/api/admin/subscriptions/<token>/device-limit \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Token: change_me_admin_token" \
+  -d '{"device_limit":7}'
+
+curl -X POST http://127.0.0.1:8012/api/admin/subscriptions/<token>/retry-provisioning \
+  -H "X-Admin-Token: change_me_admin_token"
+```
+
+If 3x-ui provisioning fails during admin order confirmation, the order is still marked `paid`, a subscription is created with `status=provisioning_failed`, and the cabinet/subscription page shows that access is being prepared.
+
+## Backup and Restore
+
+Daily PostgreSQL dump:
+
+```bash
+mkdir -p backups/postgres
+docker compose -f docker-compose.prod.yml exec -T postgres pg_dump -U arvexo -d arvexo_connect > backups/postgres/arvexo_connect_$(date +%F).sql
+```
+
+Restore PostgreSQL dump:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T postgres psql -U arvexo -d arvexo_connect < backups/postgres/arvexo_connect_YYYY-MM-DD.sql
+```
+
+Back up 3x-ui databases and env files:
+
+```bash
+mkdir -p backups/xui backups/env
+cp /path/to/main/x-ui.db backups/xui/x-ui-main_$(date +%F).db
+cp /path/to/node/x-ui.db backups/xui/x-ui-node_$(date +%F).db
+cp backend/.env backups/env/backend.env.$(date +%F)
+cp bot/.env backups/env/bot.env.$(date +%F)
+```
+
+Store backups on the main server and a reserve server. Prefer encrypted archives for `.env` and `x-ui.db`.
+
+## Production Checks
+
+- `APP_ENV=production`.
+- `JWT_SECRET`, `ADMIN_TOKEN`, and `BOT_INTERNAL_TOKEN` are non-default strong secrets.
+- `XUI_API_TOKEN`, `XUI_BASE_URL`, `XUI_SUB_BASE_URL`, and `XUI_DEFAULT_INBOUND_IDS` are configured.
+- `CRYPTO_PAYMENT_ADDRESS` and SBP fields are configured for enabled payment methods.
+- CORS contains only production origins.
+- Nginx sets security headers and proxies `api.arvexo.ru` and `sub.arvexo.ru` to backend.
+- Uptime Kuma monitors frontend, backend `/health`, raw test subscription, Telegram bot, PostgreSQL, 3x-ui, Reality TCP 443, Hysteria UDP 443, and SSL certificates.
+
+## Manual v1.0 Smoke Test
+
+1. Open `connect.arvexo.ru` and verify landing, CTA, mobile layout, instructions, and support links.
+2. Register a user and open `/cabinet`.
+3. Create Base order with `crypto_manual`; submit tx hash; confirm in `/admin`; verify subscription URL and QR.
+4. Create Family order with `sbp_manual`; verify recipient, payment purpose, and admin confirmation.
+5. Create Custom order with devices, duration, default mode, iPhone Stable, priority support, backup profiles, and custom routing ready.
+6. Open `/u/{token}` in browser and verify safe HTML page; open `/u/{token}?format=raw` and verify raw body.
+7. Change routing mode in cabinet and Telegram bot.
+8. Add and delete devices in cabinet and Telegram bot.
+9. Link Telegram from cabinet and verify `/start link_...`.
+10. Open `/cabinet/orders`, `/cabinet/settings`, `/cabinet/support`, and `/cabinet/subscription/{token}`.
+11. Trigger `/admin/subscriptions/{token}/device-limit`, extend, disable, original URL change, retry provisioning, and audit log.
+12. Simulate 3x-ui failure and verify `provisioning_failed` user/admin state.
+13. Confirm backup commands and restore procedure are documented for the server.
+
 ## Nginx
 
 Both `api.arvexo.ru` and `sub.arvexo.ru` can proxy to:
@@ -311,4 +407,5 @@ PUBLIC_BASE_URL=https://sub.arvexo.ru
 APP_ENV=production
 ADMIN_TOKEN=strong_secret
 BOT_INTERNAL_TOKEN=strong_secret
+JWT_SECRET=strong_secret
 ```

@@ -50,7 +50,9 @@ def quote_custom_plan(config: CustomPlanConfig) -> Decimal:
     mode_addon = Decimal("2.00") if config.default_mode == RoutingMode.GLOBAL else Decimal("0.00")
     iphone_addon = Decimal("2.00") if config.iphone_stable else Decimal("0.00")
     support_addon = Decimal("4.00") if config.priority_support else Decimal("0.00")
-    monthly = base_monthly + device_addon + mode_addon + iphone_addon + support_addon
+    backup_addon = Decimal("2.00") if config.backup_profiles else Decimal("0.00")
+    custom_routing_addon = Decimal("3.00") if config.custom_routing_ready else Decimal("0.00")
+    monthly = base_monthly + device_addon + mode_addon + iphone_addon + support_addon + backup_addon + custom_routing_addon
     months = Decimal(config.duration_days) / Decimal(30)
     discount = Decimal("0.90") if config.duration_days >= 180 else Decimal("1.00")
     return (monthly * months * discount).quantize(Decimal("0.01"))
@@ -60,6 +62,7 @@ async def create_order_for_user(
     session: AsyncSession,
     user_id: UUID,
     plan_code: str,
+    payment_method: PaymentMethod,
     custom_config: CustomPlanConfig | None,
 ) -> Order:
     user = await session.get(User, user_id)
@@ -84,10 +87,15 @@ async def create_order_for_user(
         status=OrderStatus.PENDING.value,
         amount=amount,
         currency=plan.currency,
-        payment_method=PaymentMethod.CRYPTO_MANUAL.value,
-        crypto_network=settings.crypto_payment_network,
-        crypto_address=settings.crypto_payment_address,
-        crypto_amount=amount,
+        payment_method=payment_method.value,
+        provider=payment_method.value,
+        payment_url=settings.sbp_payment_url if payment_method == PaymentMethod.SBP_MANUAL else None,
+        qr_payload=settings.sbp_qr_payload if payment_method == PaymentMethod.SBP_MANUAL else None,
+        qr_image_base64=settings.sbp_qr_image_base64 if payment_method == PaymentMethod.SBP_MANUAL else None,
+        payment_recipient=settings.sbp_payment_recipient if payment_method == PaymentMethod.SBP_MANUAL else None,
+        crypto_network=settings.crypto_payment_network if payment_method == PaymentMethod.CRYPTO_MANUAL else None,
+        crypto_address=settings.crypto_payment_address if payment_method == PaymentMethod.CRYPTO_MANUAL else None,
+        crypto_amount=amount if payment_method == PaymentMethod.CRYPTO_MANUAL else None,
         order_metadata=order_metadata,
         expires_at=utc_now() + timedelta(hours=24),
     )
@@ -154,6 +162,12 @@ def order_to_out(order: Order) -> OrderOut:
         amount=order.amount,
         currency=order.currency,
         payment_method=order.payment_method,
+        provider=order.provider,
+        provider_payment_id=order.provider_payment_id,
+        payment_url=order.payment_url,
+        qr_payload=order.qr_payload,
+        qr_image_base64=order.qr_image_base64,
+        payment_recipient=order.payment_recipient,
         crypto_network=order.crypto_network,
         crypto_address=order.crypto_address,
         crypto_amount=order.crypto_amount,

@@ -12,6 +12,7 @@ class SubscriptionStatus(StrEnum):
     DISABLED = "disabled"
     EXPIRED = "expired"
     TRIAL = "trial"
+    PROVISIONING_FAILED = "provisioning_failed"
 
 
 class RoutingMode(StrEnum):
@@ -37,6 +38,7 @@ class OrderStatus(StrEnum):
 
 class PaymentMethod(StrEnum):
     CRYPTO_MANUAL = "crypto_manual"
+    SBP_MANUAL = "sbp_manual"
 
 
 class PromoCodeStatus(StrEnum):

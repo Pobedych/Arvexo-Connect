@@ -37,6 +37,8 @@ class AccountLoginRequest(BaseModel):
 class AccessKeyResponse(BaseModel):
     ok: bool
     user_id: str
+    email: str | None = None
+    display_name: str | None = None
     access_token: str
     token_type: str = "bearer"
     subscriptions: list[SubscriptionOut]
