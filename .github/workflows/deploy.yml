@@ -129,4 +129,40 @@ jobs:
           SSHPASS: ${{ secrets.PASSWORD }}
         run: |
           sshpass -e ssh -p "$DEPLOY_PORT" "$DEPLOY_USERNAME@$DEPLOY_HOST" \
-            "cd '$DEPLOY_TARGET_PATH' && docker compose -f docker-compose.prod.yml up -d --build postgres && until docker compose -f docker-compose.prod.yml exec -T postgres pg_isready -U arvexo -d arvexo_connect; do sleep 2; done && docker compose -f docker-compose.prod.yml up -d --build backend && docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head && docker compose -f docker-compose.prod.yml up -d --build && docker image prune -f"
+            "cd '$DEPLOY_TARGET_PATH' && bash -s" <<'REMOTE'
+          set -euo pipefail
+          export COMPOSE_PARALLEL_LIMIT=1
+
+          on_error() {
+            echo "Deployment failed. Container status:"
+            docker compose -f docker-compose.prod.yml ps || true
+            echo "Recent backend logs:"
+            docker compose -f docker-compose.prod.yml logs --tail=80 backend || true
+            echo "Recent frontend logs:"
+            docker compose -f docker-compose.prod.yml logs --tail=80 frontend || true
+            echo "Recent bot logs:"
+            docker compose -f docker-compose.prod.yml logs --tail=80 bot || true
+          }
+          trap on_error ERR
+
+          test -f backend/.env || (echo "backend/.env is missing" && exit 1)
+          grep -Eq '^JWT_SECRET=.+$' backend/.env || (echo "JWT_SECRET is missing in backend/.env" && exit 1)
+
+          docker compose -f docker-compose.prod.yml up -d postgres
+          until docker compose -f docker-compose.prod.yml exec -T postgres pg_isready -U arvexo -d arvexo_connect; do
+            sleep 2
+          done
+
+          docker compose -f docker-compose.prod.yml build backend
+          docker compose -f docker-compose.prod.yml up -d backend
+          docker compose -f docker-compose.prod.yml exec -T backend alembic upgrade head
+
+          docker compose -f docker-compose.prod.yml build frontend
+          docker compose -f docker-compose.prod.yml up -d frontend
+
+          docker compose -f docker-compose.prod.yml build bot
+          docker compose -f docker-compose.prod.yml up -d bot
+
+          docker compose -f docker-compose.prod.yml ps
+          docker image prune -f
+          REMOTE
