@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db_session
 from app.main import app
 from app.models.plan import Plan
+from app.config import settings
 from app.services.xui_client import XuiCreatedClient
 
 
@@ -96,15 +97,17 @@ async def test_create_order_and_submit_payment(client, session_factory):
     order = response.json()["order"]
     assert order["amount"] == "5.00"
     assert order["status"] == "pending"
+    assert order["payment_purpose"] == f"Arvexo Connect order {order['id']}"
 
     payment = await client.post(
         f"/api/cabinet/orders/{order['id']}/payment",
         headers={"Authorization": f"Bearer {jwt}"},
-        json={"tx_hash": "tx123456789"},
+        json={"payment_reference": "tx123456789"},
     )
 
     assert payment.status_code == 200
     assert payment.json()["order"]["status"] == "waiting_confirmation"
+    assert payment.json()["order"]["payment_reference"] == "tx123456789"
 
 
 @pytest.mark.asyncio
@@ -123,6 +126,28 @@ async def test_create_sbp_manual_order(client, session_factory):
     assert order["payment_method"] == "sbp_manual"
     assert order["provider"] == "sbp_manual"
     assert order["crypto_address"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_ton_manual_order_uses_ton_amount(client, session_factory, monkeypatch):
+    await seed_plans(session_factory)
+    jwt = await register(client)
+    monkeypatch.setattr(settings, "ton_payment_address", "UQ_TEST_TON_WALLET")
+    monkeypatch.setattr(settings, "ton_usdt_rate", Decimal("2.50"))
+
+    response = await client.post(
+        "/api/cabinet/orders",
+        headers={"Authorization": f"Bearer {jwt}"},
+        json={"plan_code": "base", "payment_method": "ton_manual"},
+    )
+
+    assert response.status_code == 201
+    order = response.json()["order"]
+    assert order["payment_method"] == "ton_manual"
+    assert order["payment_currency"] == "TON"
+    assert order["payment_amount"] == "2.000000000"
+    assert order["crypto_network"] == "TON"
+    assert order["crypto_address"] == "UQ_TEST_TON_WALLET"
 
 
 @pytest.mark.asyncio

@@ -38,6 +38,7 @@ class OrderStatus(StrEnum):
 
 class PaymentMethod(StrEnum):
     CRYPTO_MANUAL = "crypto_manual"
+    TON_MANUAL = "ton_manual"
     SBP_MANUAL = "sbp_manual"
 
 

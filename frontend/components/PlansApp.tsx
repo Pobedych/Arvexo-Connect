@@ -38,7 +38,7 @@ export function PlansApp() {
     backup_profiles: false,
     custom_routing_ready: false
   });
-  const [paymentMethod, setPaymentMethod] = useState<"crypto_manual" | "sbp_manual">("crypto_manual");
+  const [paymentMethod, setPaymentMethod] = useState<"crypto_manual" | "ton_manual" | "sbp_manual">("crypto_manual");
   const [quote, setQuote] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -150,9 +150,10 @@ export function PlansApp() {
 
         <div className="mt-8 rounded-lg border border-white/[0.1] bg-[#101010] p-6">
           <h2 className="text-xl font-semibold">Метод оплаты</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <PaymentButton active={paymentMethod === "crypto_manual"} title="Crypto manual" text="USDT, сеть и адрес из настроек сервиса." onClick={() => setPaymentMethod("crypto_manual")} />
-            <PaymentButton active={paymentMethod === "sbp_manual"} title="SBP manual" text="Ручная проверка перевода по назначению платежа." onClick={() => setPaymentMethod("sbp_manual")} />
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <PaymentButton active={paymentMethod === "crypto_manual"} title="USDT TRC20" text="Перевод USDT на TRC20-кошелёк." onClick={() => setPaymentMethod("crypto_manual")} />
+            <PaymentButton active={paymentMethod === "ton_manual"} title="TON" text="Перевод TON на кошелёк с комментарием заказа." onClick={() => setPaymentMethod("ton_manual")} />
+            <PaymentButton active={paymentMethod === "sbp_manual"} title="СБП" text="Ручная проверка перевода по назначению платежа." onClick={() => setPaymentMethod("sbp_manual")} />
           </div>
         </div>
 

@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.enums import PaymentMethod, RoutingMode
 
@@ -50,7 +50,18 @@ class CreateOrderRequest(BaseModel):
 
 
 class SubmitPaymentRequest(BaseModel):
-    tx_hash: str = Field(min_length=6, max_length=256)
+    tx_hash: str | None = Field(default=None, min_length=3, max_length=256)
+    payment_reference: str | None = Field(default=None, min_length=3, max_length=256)
+
+    @model_validator(mode="after")
+    def require_payment_reference(self):
+        if not self.reference_value:
+            raise ValueError("payment_reference is required")
+        return self
+
+    @property
+    def reference_value(self) -> str:
+        return (self.payment_reference or self.tx_hash or "").strip()
 
 
 class OrderOut(BaseModel):
@@ -60,6 +71,8 @@ class OrderOut(BaseModel):
     plan_name: str | None = None
     amount: Decimal
     currency: str
+    payment_amount: Decimal | None = None
+    payment_currency: str | None = None
     payment_method: str
     provider: str | None
     provider_payment_id: str | None
@@ -71,6 +84,8 @@ class OrderOut(BaseModel):
     crypto_address: str | None
     crypto_amount: Decimal | None
     tx_hash: str | None
+    payment_reference: str | None = None
+    payment_purpose: str | None = None
     custom_config: dict | None = None
     subscription_token: str | None = None
     created_at: datetime

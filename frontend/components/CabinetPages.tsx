@@ -12,6 +12,8 @@ type Order = {
   plan_name: string | null;
   amount: string;
   currency: string;
+  payment_amount: string | null;
+  payment_currency: string | null;
   payment_method: string;
   tx_hash: string | null;
   subscription_token: string | null;
@@ -96,7 +98,7 @@ export function OrdersApp() {
               <span className="text-sm font-bold text-[#ffb3bb]">{order.status}</span>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              <Info label="Сумма" value={`${order.amount} ${order.currency}`} />
+              <Info label="Сумма" value={`${order.payment_amount || order.amount} ${order.payment_currency || order.currency}`} />
               <Info label="Метод" value={order.payment_method} />
               <Info label="Tx / comment" value={order.tx_hash || "не отправлен"} />
               <Info label="Оплачен" value={order.paid_at ? new Date(order.paid_at).toLocaleString() : "нет"} />

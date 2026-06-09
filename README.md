@@ -70,6 +70,9 @@ JWT_SECRET=strong_secret
 JWT_EXPIRES_MINUTES=60
 CRYPTO_PAYMENT_NETWORK=TRC20
 CRYPTO_PAYMENT_ADDRESS=change_me_crypto_address
+TON_PAYMENT_NETWORK=TON
+TON_PAYMENT_ADDRESS=change_me_ton_address
+TON_USDT_RATE=3.50
 SBP_PAYMENT_RECIPIENT="ИП / получатель"
 SBP_PAYMENT_URL=
 SBP_QR_PAYLOAD=
@@ -186,6 +189,11 @@ curl -X POST http://127.0.0.1:8012/api/cabinet/orders \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $JWT" \
   -d '{"plan_code":"base","payment_method":"crypto_manual"}'
+
+curl -X POST http://127.0.0.1:8012/api/cabinet/orders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $JWT" \
+  -d '{"plan_code":"base","payment_method":"ton_manual"}'
 
 curl -X POST http://127.0.0.1:8012/api/cabinet/orders \
   -H "Content-Type: application/json" \
@@ -338,6 +346,34 @@ curl -X POST http://127.0.0.1:8012/api/admin/subscriptions/<token>/retry-provisi
 ```
 
 If 3x-ui provisioning fails during admin order confirmation, the order is still marked `paid`, a subscription is created with `status=provisioning_failed`, and the cabinet/subscription page shows that access is being prepared.
+
+## Payment Setup
+
+Manual USDT:
+
+- Set `CRYPTO_PAYMENT_NETWORK=TRC20`.
+- Set `CRYPTO_PAYMENT_ADDRESS` to the real USDT TRC20 wallet.
+- User submits tx hash in checkout.
+- Admin confirms the order in `/admin`.
+
+Manual TON:
+
+- Set `TON_PAYMENT_NETWORK=TON`.
+- Set `TON_PAYMENT_ADDRESS` to the real TON wallet.
+- Set `TON_USDT_RATE` manually, for example `3.50` if 1 TON = 3.50 USDT.
+- Backend converts plan price from USDT to TON for checkout.
+- Ask users to include the shown `Arvexo Connect order <order_id>` comment when their wallet supports comments.
+- User submits tx hash or transfer comment in checkout.
+- Admin confirms the order in `/admin`.
+
+Manual SBP:
+
+- Set `SBP_PAYMENT_RECIPIENT` to the exact recipient visible in the banking app, for example `ИП Иванов Иван` or your legal recipient name.
+- Optional: set `SBP_PAYMENT_URL` if your bank provides a payment link.
+- Optional: set `SBP_QR_PAYLOAD` if your bank provides an SBP QR payload string.
+- Optional: set `SBP_QR_IMAGE_BASE64` if you already have a QR image as base64 PNG.
+- Checkout shows amount, recipient, order payment purpose, QR/link when configured, and asks the user to submit a bank transfer ID/comment.
+- Admin verifies the transfer manually and confirms the order.
 
 ## Backup and Restore
 

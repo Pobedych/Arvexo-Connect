@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -24,6 +26,9 @@ class Settings(BaseSettings):
     jwt_expires_minutes: int = 60
     crypto_payment_network: str = "TRC20"
     crypto_payment_address: str | None = None
+    ton_payment_network: str = "TON"
+    ton_payment_address: str | None = None
+    ton_usdt_rate: Decimal | None = None
     sbp_payment_recipient: str | None = None
     sbp_payment_url: str | None = None
     sbp_qr_payload: str | None = None

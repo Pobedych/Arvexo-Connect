@@ -133,7 +133,7 @@ async def submit_order_payment_endpoint(
     session: AsyncSession = Depends(get_db_session),
 ):
     order = await require_user_order(session, user_id, order_id)
-    await submit_order_payment(session, order, payload.tx_hash)
+    await submit_order_payment(session, order, payload.reference_value)
     await session.commit()
     order = await load_order_for_output(session, order.id)
     return CreateOrderResponse(ok=True, order=order_to_out(order))

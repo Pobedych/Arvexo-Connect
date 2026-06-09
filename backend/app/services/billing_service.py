@@ -21,6 +21,39 @@ CUSTOM_ALLOWED_DURATIONS = {30, 90, 180, 365}
 CUSTOM_ALLOWED_DEVICES = {1, 3, 5, 10}
 
 
+def require_payment_configuration(payment_method: PaymentMethod) -> None:
+    if settings.app_env != "production":
+        return
+    if payment_method == PaymentMethod.CRYPTO_MANUAL and not settings.crypto_payment_address:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Crypto payment address is not configured")
+    if payment_method == PaymentMethod.TON_MANUAL and (not settings.ton_payment_address or not settings.ton_usdt_rate):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="TON payment address or rate is not configured")
+    if payment_method == PaymentMethod.SBP_MANUAL and not any(
+        [settings.sbp_payment_recipient, settings.sbp_payment_url, settings.sbp_qr_payload, settings.sbp_qr_image_base64]
+    ):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="SBP payment details are not configured")
+
+
+def order_payment_purpose(order_id) -> str:
+    return f"Arvexo Connect order {order_id}"
+
+
+def calculate_payment_amount(amount: Decimal, payment_method: PaymentMethod) -> Decimal:
+    if payment_method != PaymentMethod.TON_MANUAL:
+        return amount
+    if not settings.ton_usdt_rate or settings.ton_usdt_rate <= 0:
+        if settings.app_env == "production":
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="TON payment rate is not configured")
+        return amount
+    return (amount / settings.ton_usdt_rate).quantize(Decimal("0.000000001"))
+
+
+def payment_currency_for_method(payment_method: str) -> str:
+    if payment_method == PaymentMethod.TON_MANUAL.value:
+        return "TON"
+    return "USDT"
+
+
 async def list_active_plans(session: AsyncSession) -> list[Plan]:
     result = await session.execute(select(Plan).where(Plan.is_active.is_(True)).order_by(Plan.is_custom, Plan.price, Plan.code))
     return list(result.scalars().all())
@@ -69,6 +102,7 @@ async def create_order_for_user(
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
+    require_payment_configuration(payment_method)
     plan = await require_plan_by_code(session, plan_code)
     if plan.is_custom:
         if custom_config is None:
@@ -81,6 +115,7 @@ async def create_order_for_user(
         amount = Decimal(plan.price)
         order_metadata = None
 
+    payment_amount = calculate_payment_amount(amount, payment_method)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -93,9 +128,17 @@ async def create_order_for_user(
         qr_payload=settings.sbp_qr_payload if payment_method == PaymentMethod.SBP_MANUAL else None,
         qr_image_base64=settings.sbp_qr_image_base64 if payment_method == PaymentMethod.SBP_MANUAL else None,
         payment_recipient=settings.sbp_payment_recipient if payment_method == PaymentMethod.SBP_MANUAL else None,
-        crypto_network=settings.crypto_payment_network if payment_method == PaymentMethod.CRYPTO_MANUAL else None,
-        crypto_address=settings.crypto_payment_address if payment_method == PaymentMethod.CRYPTO_MANUAL else None,
-        crypto_amount=amount if payment_method == PaymentMethod.CRYPTO_MANUAL else None,
+        crypto_network=(
+            settings.ton_payment_network if payment_method == PaymentMethod.TON_MANUAL
+            else settings.crypto_payment_network if payment_method == PaymentMethod.CRYPTO_MANUAL
+            else None
+        ),
+        crypto_address=(
+            settings.ton_payment_address if payment_method == PaymentMethod.TON_MANUAL
+            else settings.crypto_payment_address if payment_method == PaymentMethod.CRYPTO_MANUAL
+            else None
+        ),
+        crypto_amount=payment_amount if payment_method in (PaymentMethod.CRYPTO_MANUAL, PaymentMethod.TON_MANUAL) else None,
         order_metadata=order_metadata,
         expires_at=utc_now() + timedelta(hours=24),
     )
@@ -142,10 +185,10 @@ async def list_user_orders(session: AsyncSession, user_id: UUID) -> list[Order]:
     return list(result.scalars().all())
 
 
-async def submit_order_payment(session: AsyncSession, order: Order, tx_hash: str) -> Order:
+async def submit_order_payment(session: AsyncSession, order: Order, payment_reference: str) -> Order:
     if order.status not in (OrderStatus.PENDING.value, OrderStatus.WAITING_CONFIRMATION.value):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Order cannot be updated")
-    order.tx_hash = tx_hash
+    order.tx_hash = payment_reference.strip()
     order.status = OrderStatus.WAITING_CONFIRMATION.value
     await write_audit_log(session, "order_payment_submitted", user_id=order.user_id, metadata={"order_id": str(order.id)})
     return order
@@ -161,6 +204,8 @@ def order_to_out(order: Order) -> OrderOut:
         plan_name=order.plan.name if order.plan else None,
         amount=order.amount,
         currency=order.currency,
+        payment_amount=order.crypto_amount if order.crypto_amount is not None else order.amount,
+        payment_currency=payment_currency_for_method(order.payment_method),
         payment_method=order.payment_method,
         provider=order.provider,
         provider_payment_id=order.provider_payment_id,
@@ -172,6 +217,8 @@ def order_to_out(order: Order) -> OrderOut:
         crypto_address=order.crypto_address,
         crypto_amount=order.crypto_amount,
         tx_hash=order.tx_hash,
+        payment_reference=order.tx_hash,
+        payment_purpose=order_payment_purpose(order.id),
         custom_config=metadata.get("custom_config"),
         subscription_token=subscription_token,
         created_at=order.created_at,
