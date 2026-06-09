@@ -22,7 +22,7 @@ class Plan(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    currency: Mapped[str] = mapped_column(String(12), default="USDT", nullable=False)
+    currency: Mapped[str] = mapped_column(String(12), default="RUB", nullable=False)
     duration_days: Mapped[int] = mapped_column(Integer, nullable=False)
     device_limit: Mapped[int] = mapped_column(Integer, nullable=False)
     is_custom: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

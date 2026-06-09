@@ -37,6 +37,8 @@ type Order = {
   plan_name: string | null;
   amount: string;
   currency: string;
+  payment_amount: string | null;
+  payment_currency: string | null;
   tx_hash: string | null;
   subscription_token: string | null;
   created_at: string;
@@ -261,11 +263,12 @@ export function AdminApp() {
 
           <Panel title="Orders">
             <Table
-              headers={["Status", "Plan", "Amount", "Tx", "Action"]}
+              headers={["Status", "Plan", "Price", "Payment", "Tx", "Action"]}
               rows={orders.slice(0, 12).map((order) => [
                 order.status,
                 order.plan_code || "",
-                `${order.amount} ${order.currency}`,
+                formatMoney(order.amount, order.currency),
+                `${order.payment_amount || order.amount} ${order.payment_currency || order.currency}`,
                 order.tx_hash || "",
                 waitingOrders.some((item) => item.id === order.id) ? (
                   <button onClick={() => confirmOrder(order.id)} className="rounded-lg bg-[#ef233c] px-3 py-2 text-xs font-bold">Confirm</button>
@@ -414,4 +417,10 @@ function getApiBase() {
   if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
   if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) return "http://127.0.0.1:8012";
   return "https://api.arvexo.ru";
+}
+
+function formatMoney(value: string | number, currency: string) {
+  const numeric = Number(value);
+  if (currency === "RUB") return `${Number.isFinite(numeric) ? numeric.toLocaleString("ru-RU", { maximumFractionDigits: 0 }) : value} ₽`;
+  return `${value} ${currency}`;
 }

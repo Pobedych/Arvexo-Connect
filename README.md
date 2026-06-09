@@ -70,6 +70,7 @@ JWT_SECRET=strong_secret
 JWT_EXPIRES_MINUTES=60
 CRYPTO_PAYMENT_NETWORK=TRC20
 CRYPTO_PAYMENT_ADDRESS=change_me_crypto_address
+RUB_USDT_RATE=100.00
 TON_PAYMENT_NETWORK=TON
 TON_PAYMENT_ADDRESS=change_me_ton_address
 TON_USDT_RATE=3.50
@@ -349,10 +350,13 @@ If 3x-ui provisioning fails during admin order confirmation, the order is still 
 
 ## Payment Setup
 
+Prices are shown to users in RUB. Crypto checkout converts the RUB order amount to USDT through `RUB_USDT_RATE`.
+
 Manual USDT:
 
 - Set `CRYPTO_PAYMENT_NETWORK=TRC20`.
 - Set `CRYPTO_PAYMENT_ADDRESS` to the real USDT TRC20 wallet.
+- Set `RUB_USDT_RATE`, for example `100.00` if 1 USDT = 100 RUB.
 - User submits tx hash in checkout.
 - Admin confirms the order in `/admin`.
 
@@ -360,8 +364,9 @@ Manual TON:
 
 - Set `TON_PAYMENT_NETWORK=TON`.
 - Set `TON_PAYMENT_ADDRESS` to the real TON wallet.
+- Set `RUB_USDT_RATE`, for example `100.00` if 1 USDT = 100 RUB.
 - Set `TON_USDT_RATE` manually, for example `3.50` if 1 TON = 3.50 USDT.
-- Backend converts plan price from USDT to TON for checkout.
+- Backend converts plan price from RUB to USDT and then to TON for checkout.
 - Ask users to include the shown `Arvexo Connect order <order_id>` comment when their wallet supports comments.
 - User submits tx hash or transfer comment in checkout.
 - Admin confirms the order in `/admin`.

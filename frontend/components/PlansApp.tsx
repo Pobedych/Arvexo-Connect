@@ -63,7 +63,7 @@ export function PlansApp() {
       body: JSON.stringify(custom)
     })
       .then((response) => response.json())
-      .then((body) => setQuote(`${body.price} ${body.currency}`))
+      .then((body) => setQuote(formatMoney(body.price, body.currency)))
       .catch(() => setQuote(""));
   }, [custom, selected]);
 
@@ -118,7 +118,7 @@ export function PlansApp() {
             >
               <h2 className="text-2xl font-bold">{plan.name}</h2>
               <p className="mt-3 min-h-12 text-sm text-white/56">{plan.description}</p>
-              <p className="mt-6 text-3xl font-bold">{plan.is_custom ? quote || "от 4 USDT" : `${plan.price} ${plan.currency}`}</p>
+              <p className="mt-6 text-3xl font-bold">{plan.is_custom ? quote || "от 299 ₽" : formatMoney(plan.price, plan.currency)}</p>
               <p className="mt-2 text-sm text-white/45">{plan.duration_days} дней, до {plan.device_limit} устройств</p>
             </button>
           ))}
@@ -205,4 +205,10 @@ function getApiBase() {
   if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
   if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) return "http://127.0.0.1:8012";
   return "https://api.arvexo.ru";
+}
+
+function formatMoney(value: string | number, currency: string) {
+  const numeric = Number(value);
+  if (currency === "RUB") return `${Number.isFinite(numeric) ? numeric.toLocaleString("ru-RU", { maximumFractionDigits: 0 }) : value} ₽`;
+  return `${value} ${currency}`;
 }

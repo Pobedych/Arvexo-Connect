@@ -98,7 +98,8 @@ export function OrdersApp() {
               <span className="text-sm font-bold text-[#ffb3bb]">{order.status}</span>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              <Info label="Сумма" value={`${order.payment_amount || order.amount} ${order.payment_currency || order.currency}`} />
+              <Info label="Цена" value={formatMoney(order.amount, order.currency)} />
+              <Info label="К оплате" value={`${order.payment_amount || order.amount} ${order.payment_currency || order.currency}`} />
               <Info label="Метод" value={order.payment_method} />
               <Info label="Tx / comment" value={order.tx_hash || "не отправлен"} />
               <Info label="Оплачен" value={order.paid_at ? new Date(order.paid_at).toLocaleString() : "нет"} />
@@ -545,6 +546,12 @@ function getApiBase() {
   if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
   if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) return "http://127.0.0.1:8012";
   return "https://api.arvexo.ru";
+}
+
+function formatMoney(value: string | number, currency: string) {
+  const numeric = Number(value);
+  if (currency === "RUB") return `${Number.isFinite(numeric) ? numeric.toLocaleString("ru-RU", { maximumFractionDigits: 0 }) : value} ₽`;
+  return `${value} ${currency}`;
 }
 
 async function readApiError(response: Response, fallback: string) {

@@ -44,6 +44,7 @@ export function CheckoutApp() {
   const isWaiting = order?.status === "waiting_confirmation";
   const canSubmit = Boolean(order && !isPaid && paymentReference.trim().length >= 3);
   const amountText = order ? `${order.payment_amount || order.crypto_amount || order.amount} ${order.payment_currency || order.currency}` : "";
+  const basePriceText = order ? formatMoney(order.amount, order.currency) : "";
   const purposeText = order?.payment_purpose || (order ? `Arvexo Connect order ${order.id}` : "");
   const existingReference = order?.payment_reference || order?.tx_hash || "";
 
@@ -137,7 +138,8 @@ export function CheckoutApp() {
             {isWaiting && <Notice>Платеж уже отправлен на проверку. Можно обновить ID/комментарий, если ошиблись.</Notice>}
 
             <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <CopyInfo label="Сумма" value={amountText} onCopy={() => copy(amountText, "amount")} />
+              <Info label="Цена тарифа" value={basePriceText} />
+              <CopyInfo label="К оплате" value={amountText} onCopy={() => copy(amountText, "amount")} />
               <CopyInfo label="Назначение платежа" value={purposeText} onCopy={() => copy(purposeText, "purpose")} />
               {isSbp ? (
                 <>
@@ -273,4 +275,10 @@ function getApiBase() {
   if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
   if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) return "http://127.0.0.1:8012";
   return "https://api.arvexo.ru";
+}
+
+function formatMoney(value: string | number, currency: string) {
+  const numeric = Number(value);
+  if (currency === "RUB") return `${Number.isFinite(numeric) ? numeric.toLocaleString("ru-RU", { maximumFractionDigits: 0 }) : value} ₽`;
+  return `${value} ${currency}`;
 }

@@ -101,7 +101,7 @@ async def get_plans(session: AsyncSession = Depends(get_db_session)):
 
 @router.post("/custom-plan/quote", response_model=CustomPlanQuoteResponse)
 async def quote_custom_plan_endpoint(payload: CustomPlanConfig):
-    return CustomPlanQuoteResponse(ok=True, price=quote_custom_plan(payload), currency="USDT", features=payload)
+    return CustomPlanQuoteResponse(ok=True, price=quote_custom_plan(payload), currency="RUB", features=payload)
 
 
 @router.get("/orders", response_model=OrdersResponse)

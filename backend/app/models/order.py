@@ -25,7 +25,7 @@ class Order(TimestampMixin, Base):
     subscription_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("vpn_subscriptions.id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String(32), default=OrderStatus.PENDING.value, nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    currency: Mapped[str] = mapped_column(String(12), default="USDT", nullable=False)
+    currency: Mapped[str] = mapped_column(String(12), default="RUB", nullable=False)
     payment_method: Mapped[str] = mapped_column(String(64), default=PaymentMethod.CRYPTO_MANUAL.value, nullable=False)
     provider: Mapped[Optional[str]] = mapped_column(String(64))
     provider_payment_id: Mapped[Optional[str]] = mapped_column(String(256))

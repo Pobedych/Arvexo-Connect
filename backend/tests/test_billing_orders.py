@@ -47,9 +47,9 @@ async def seed_plans(session_factory):
     async with session_factory() as session:
         session.add_all(
             [
-                Plan(code="base", name="Base", description="Base", price=Decimal("5.00"), duration_days=30, device_limit=2),
-                Plan(code="family", name="Family", description="Family", price=Decimal("12.00"), duration_days=30, device_limit=7),
-                Plan(code="custom", name="Custom", description="Custom", price=Decimal("0.00"), duration_days=30, device_limit=1, is_custom=True),
+                Plan(code="base", name="Base", description="Base", price=Decimal("199.00"), currency="RUB", duration_days=30, device_limit=2),
+                Plan(code="family", name="Family", description="Family", price=Decimal("599.00"), currency="RUB", duration_days=30, device_limit=7),
+                Plan(code="custom", name="Custom", description="Custom", price=Decimal("0.00"), currency="RUB", duration_days=30, device_limit=1, is_custom=True),
             ]
         )
         await session.commit()
@@ -84,9 +84,10 @@ async def test_create_order_requires_token(client, session_factory):
 
 
 @pytest.mark.asyncio
-async def test_create_order_and_submit_payment(client, session_factory):
+async def test_create_order_and_submit_payment(client, session_factory, monkeypatch):
     await seed_plans(session_factory)
     jwt = await register(client)
+    monkeypatch.setattr(settings, "rub_usdt_rate", Decimal("100.00"))
 
     response = await client.post(
         "/api/cabinet/orders",
@@ -95,7 +96,10 @@ async def test_create_order_and_submit_payment(client, session_factory):
     )
     assert response.status_code == 201
     order = response.json()["order"]
-    assert order["amount"] == "5.00"
+    assert order["amount"] == "199.00"
+    assert order["currency"] == "RUB"
+    assert order["payment_amount"] == "1.990000"
+    assert order["payment_currency"] == "USDT"
     assert order["status"] == "pending"
     assert order["payment_purpose"] == f"Arvexo Connect order {order['id']}"
 
@@ -125,6 +129,8 @@ async def test_create_sbp_manual_order(client, session_factory):
     order = response.json()["order"]
     assert order["payment_method"] == "sbp_manual"
     assert order["provider"] == "sbp_manual"
+    assert order["payment_amount"] == "199.00"
+    assert order["payment_currency"] == "RUB"
     assert order["crypto_address"] is None
 
 
@@ -132,6 +138,7 @@ async def test_create_sbp_manual_order(client, session_factory):
 async def test_create_ton_manual_order_uses_ton_amount(client, session_factory, monkeypatch):
     await seed_plans(session_factory)
     jwt = await register(client)
+    monkeypatch.setattr(settings, "rub_usdt_rate", Decimal("100.00"))
     monkeypatch.setattr(settings, "ton_payment_address", "UQ_TEST_TON_WALLET")
     monkeypatch.setattr(settings, "ton_usdt_rate", Decimal("2.50"))
 
@@ -145,7 +152,7 @@ async def test_create_ton_manual_order_uses_ton_amount(client, session_factory, 
     order = response.json()["order"]
     assert order["payment_method"] == "ton_manual"
     assert order["payment_currency"] == "TON"
-    assert order["payment_amount"] == "2.000000000"
+    assert order["payment_amount"] == "0.796000000"
     assert order["crypto_network"] == "TON"
     assert order["crypto_address"] == "UQ_TEST_TON_WALLET"
 

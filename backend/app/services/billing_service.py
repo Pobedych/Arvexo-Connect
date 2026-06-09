@@ -24,10 +24,10 @@ CUSTOM_ALLOWED_DEVICES = {1, 3, 5, 10}
 def require_payment_configuration(payment_method: PaymentMethod) -> None:
     if settings.app_env != "production":
         return
-    if payment_method == PaymentMethod.CRYPTO_MANUAL and not settings.crypto_payment_address:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Crypto payment address is not configured")
-    if payment_method == PaymentMethod.TON_MANUAL and (not settings.ton_payment_address or not settings.ton_usdt_rate):
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="TON payment address or rate is not configured")
+    if payment_method == PaymentMethod.CRYPTO_MANUAL and (not settings.crypto_payment_address or not settings.rub_usdt_rate):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Crypto payment address or RUB/USDT rate is not configured")
+    if payment_method == PaymentMethod.TON_MANUAL and (not settings.ton_payment_address or not settings.ton_usdt_rate or not settings.rub_usdt_rate):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="TON payment address or rates are not configured")
     if payment_method == PaymentMethod.SBP_MANUAL and not any(
         [settings.sbp_payment_recipient, settings.sbp_payment_url, settings.sbp_qr_payload, settings.sbp_qr_image_base64]
     ):
@@ -38,19 +38,37 @@ def order_payment_purpose(order_id) -> str:
     return f"Arvexo Connect order {order_id}"
 
 
-def calculate_payment_amount(amount: Decimal, payment_method: PaymentMethod) -> Decimal:
-    if payment_method != PaymentMethod.TON_MANUAL:
+def amount_to_usdt(amount: Decimal, currency: str) -> Decimal:
+    normalized_currency = currency.upper()
+    if normalized_currency in {"USDT", "USD"}:
+        return amount.quantize(Decimal("0.000001"))
+    if normalized_currency != "RUB":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Unsupported plan currency: {currency}")
+    if not settings.rub_usdt_rate or settings.rub_usdt_rate <= 0:
+        if settings.app_env == "production":
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="RUB/USDT rate is not configured")
+        return (amount / Decimal("100.00")).quantize(Decimal("0.000001"))
+    return (amount / settings.rub_usdt_rate).quantize(Decimal("0.000001"))
+
+
+def calculate_payment_amount(amount: Decimal, currency: str, payment_method: PaymentMethod) -> Decimal:
+    if payment_method == PaymentMethod.SBP_MANUAL:
         return amount
+    usdt_amount = amount_to_usdt(amount, currency)
+    if payment_method == PaymentMethod.CRYPTO_MANUAL:
+        return usdt_amount
     if not settings.ton_usdt_rate or settings.ton_usdt_rate <= 0:
         if settings.app_env == "production":
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="TON payment rate is not configured")
-        return amount
-    return (amount / settings.ton_usdt_rate).quantize(Decimal("0.000000001"))
+        return usdt_amount
+    return (usdt_amount / settings.ton_usdt_rate).quantize(Decimal("0.000000001"))
 
 
 def payment_currency_for_method(payment_method: str) -> str:
     if payment_method == PaymentMethod.TON_MANUAL.value:
         return "TON"
+    if payment_method == PaymentMethod.SBP_MANUAL.value:
+        return "RUB"
     return "USDT"
 
 
@@ -73,18 +91,18 @@ def quote_custom_plan(config: CustomPlanConfig) -> Decimal:
     if config.duration_days not in CUSTOM_ALLOWED_DURATIONS:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unsupported duration_days")
 
-    base_monthly = Decimal("4.00")
+    base_monthly = Decimal("299.00")
     device_addon = {
         1: Decimal("0.00"),
-        3: Decimal("3.00"),
-        5: Decimal("6.00"),
-        10: Decimal("14.00"),
+        3: Decimal("200.00"),
+        5: Decimal("400.00"),
+        10: Decimal("900.00"),
     }[config.devices_count]
-    mode_addon = Decimal("2.00") if config.default_mode == RoutingMode.GLOBAL else Decimal("0.00")
-    iphone_addon = Decimal("2.00") if config.iphone_stable else Decimal("0.00")
-    support_addon = Decimal("4.00") if config.priority_support else Decimal("0.00")
-    backup_addon = Decimal("2.00") if config.backup_profiles else Decimal("0.00")
-    custom_routing_addon = Decimal("3.00") if config.custom_routing_ready else Decimal("0.00")
+    mode_addon = Decimal("150.00") if config.default_mode == RoutingMode.GLOBAL else Decimal("0.00")
+    iphone_addon = Decimal("150.00") if config.iphone_stable else Decimal("0.00")
+    support_addon = Decimal("300.00") if config.priority_support else Decimal("0.00")
+    backup_addon = Decimal("150.00") if config.backup_profiles else Decimal("0.00")
+    custom_routing_addon = Decimal("250.00") if config.custom_routing_ready else Decimal("0.00")
     monthly = base_monthly + device_addon + mode_addon + iphone_addon + support_addon + backup_addon + custom_routing_addon
     months = Decimal(config.duration_days) / Decimal(30)
     discount = Decimal("0.90") if config.duration_days >= 180 else Decimal("1.00")
@@ -115,7 +133,7 @@ async def create_order_for_user(
         amount = Decimal(plan.price)
         order_metadata = None
 
-    payment_amount = calculate_payment_amount(amount, payment_method)
+    payment_amount = calculate_payment_amount(amount, plan.currency, payment_method)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
