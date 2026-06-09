@@ -46,6 +46,7 @@ export function CheckoutApp() {
   const amountText = order ? `${order.payment_amount || order.crypto_amount || order.amount} ${order.payment_currency || order.currency}` : "";
   const basePriceText = order ? formatMoney(order.amount, order.currency) : "";
   const purposeText = order?.payment_purpose || (order ? `Arvexo Connect order ${order.id}` : "");
+  const requiresTransferMessage = Boolean(isSbp || isTon);
   const existingReference = order?.payment_reference || order?.tx_hash || "";
 
   useEffect(() => {
@@ -136,11 +137,16 @@ export function CheckoutApp() {
               </Notice>
             )}
             {isWaiting && <Notice>Платеж уже отправлен на проверку. Можно обновить ID/комментарий, если ошиблись.</Notice>}
+            {!isPaid && (
+              <Notice tone="warning">
+                Переводите ровно сумму из блока «К оплате». Комиссию банка или сети оплачивайте сверху, чтобы нам дошла полная сумма. {requiresTransferMessage ? "В сообщении/комментарии к переводу обязательно укажите текст из блока «Сообщение к переводу»." : "После USDT-перевода обязательно вставьте tx hash ниже."} Один перевод — один order.
+              </Notice>
+            )}
 
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <Info label="Цена тарифа" value={basePriceText} />
               <CopyInfo label="К оплате" value={amountText} onCopy={() => copy(amountText, "amount")} />
-              <CopyInfo label="Назначение платежа" value={purposeText} onCopy={() => copy(purposeText, "purpose")} />
+              <CopyInfo label={requiresTransferMessage ? "Сообщение к переводу" : "Order reference"} value={purposeText} onCopy={() => copy(purposeText, "purpose")} highlight={requiresTransferMessage} />
               {isSbp ? (
                 <>
                   <CopyInfo label="Получатель" value={order.payment_recipient || "SBP_PAYMENT_RECIPIENT не задан"} onCopy={() => copy(order.payment_recipient || "", "recipient")} disabled={!order.payment_recipient} />
@@ -181,11 +187,11 @@ export function CheckoutApp() {
             {!isPaid && (
               <div className="mt-6 grid gap-3">
                 <label className="grid gap-2 text-sm font-semibold text-white/56">
-                  {isSbp ? "ID перевода, комментарий или последние 4 цифры" : isTon ? "Tx hash или комментарий TON-перевода" : "Tx hash"}
+                  {isSbp ? "ID перевода или комментарий из банка" : isTon ? "Tx hash или комментарий TON-перевода" : "Tx hash"}
                   <input
                     value={paymentReference}
                     onChange={(event) => setPaymentReference(event.target.value)}
-                    placeholder={isSbp ? "Например: перевод 1234 / комментарий из банка" : isTon ? purposeText : "Например: 5f8c..."}
+                    placeholder={isSbp ? purposeText : isTon ? purposeText : "Например: 5f8c..."}
                     className="h-12 rounded-lg border border-white/[0.1] bg-black px-4 text-white outline-none focus:border-[#ef233c]"
                   />
                 </label>
@@ -224,11 +230,12 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function CopyInfo({ label, value, disabled, onCopy }: { label: string; value: string; disabled?: boolean; onCopy: () => void }) {
+function CopyInfo({ label, value, disabled, highlight, onCopy }: { label: string; value: string; disabled?: boolean; highlight?: boolean; onCopy: () => void }) {
   return (
-    <div className="rounded-lg border border-white/[0.08] bg-black/25 p-4">
-      <p className="text-xs text-white/45">{label}</p>
+    <div className={`rounded-lg border p-4 ${highlight ? "border-amber-300/35 bg-amber-300/10" : "border-white/[0.08] bg-black/25"}`}>
+      <p className={`text-xs ${highlight ? "font-bold uppercase text-amber-100" : "text-white/45"}`}>{label}</p>
       <p className="mt-2 break-words text-sm font-semibold">{value}</p>
+      {highlight && <p className="mt-2 text-xs leading-5 text-amber-50/72">Этот текст нужно вставить в комментарий или сообщение к переводу без изменений.</p>}
       <button disabled={disabled} onClick={onCopy} className="mt-4 min-h-9 rounded-lg border border-white/[0.12] px-3 text-xs font-bold disabled:opacity-40">
         Скопировать
       </button>
@@ -256,9 +263,15 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Notice({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "success" }) {
+function Notice({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "success" | "warning" }) {
+  const className =
+    tone === "success"
+      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-50"
+      : tone === "warning"
+        ? "border-amber-300/30 bg-amber-300/10 text-amber-50"
+        : "border-white/[0.1] bg-black/25 text-white/64";
   return (
-    <div className={`mt-6 rounded-lg border p-4 text-sm ${tone === "success" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-50" : "border-white/[0.1] bg-black/25 text-white/64"}`}>
+    <div className={`mt-6 rounded-lg border p-4 text-sm ${className}`}>
       {children}
     </div>
   );

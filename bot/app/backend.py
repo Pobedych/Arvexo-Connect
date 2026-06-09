@@ -108,6 +108,24 @@ class BackendClient:
             response.raise_for_status()
             return response.json()
 
+    async def waiting_payment_orders(self) -> list[dict]:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(
+                f"{self.base_url}/api/telegram/admin/orders/waiting",
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            return response.json().get("orders", [])
+
+    async def confirm_order(self, order_id: str) -> dict:
+        async with httpx.AsyncClient(timeout=60) as client:
+            response = await client.post(
+                f"{self.base_url}/api/telegram/admin/orders/{order_id}/confirm",
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            return response.json()
+
     async def record_notification(self, telegram_id: int, event: str, message: str, token: str | None = None) -> dict:
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post(

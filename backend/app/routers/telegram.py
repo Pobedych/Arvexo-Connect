@@ -2,12 +2,16 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db_session
 from app.models.device import Device
+from app.models.order import Order
 from app.models.telegram_account import TelegramAccount
 from app.models.vpn_subscription import VpnSubscription
+from app.enums import OrderStatus
+from app.schemas.billing import AdminConfirmOrderResponse, OrdersResponse
 from app.schemas.common import subscription_to_out
 from app.schemas.devices import CreateDeviceRequest, CreateDeviceResponse, DeleteDeviceResponse, DevicesResponse, DeviceOut
 from app.schemas.telegram import (
@@ -23,6 +27,8 @@ from app.schemas.telegram import (
 )
 from app.schemas.telegram_link import TelegramConsumeLinkRequest, TelegramConsumeLinkResponse
 from app.services.provisioning_service import provision_trial
+from app.services.billing_service import order_to_out
+from app.services.order_confirmation_service import confirm_order_in_session
 from app.services.audit_service import write_audit_log
 from app.services.subscription_service import require_telegram_owns_subscription, set_subscription_mode
 from app.services.telegram_link_service import consume_telegram_link_token
@@ -172,3 +178,20 @@ async def record_telegram_notification(payload: TelegramNotificationRequest, ses
     )
     await session.commit()
     return TelegramNotificationResponse(ok=True)
+
+
+@router.get("/admin/orders/waiting", response_model=OrdersResponse)
+async def list_waiting_payment_orders(session: AsyncSession = Depends(get_db_session)):
+    result = await session.execute(
+        select(Order)
+        .options(selectinload(Order.plan), selectinload(Order.subscription))
+        .where(Order.status == OrderStatus.WAITING_CONFIRMATION.value)
+        .order_by(Order.updated_at.desc())
+        .limit(50)
+    )
+    return OrdersResponse(orders=[order_to_out(order) for order in result.scalars().all()])
+
+
+@router.post("/admin/orders/{order_id}/confirm", response_model=AdminConfirmOrderResponse)
+async def confirm_waiting_payment_order(order_id: UUID, session: AsyncSession = Depends(get_db_session)):
+    return await confirm_order_in_session(session, order_id)

@@ -74,15 +74,41 @@ const repairLabels = [
 export function OrdersApp() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [error, setError] = useState("");
+  const [deletingOrderId, setDeletingOrderId] = useState("");
 
   useEffect(() => {
+    void loadOrders();
+  }, []);
+
+  async function loadOrders() {
     const jwt = requireJwt();
     if (!jwt) return;
-    fetch(`${getApiBase()}/api/cabinet/orders`, { headers: { Authorization: `Bearer ${jwt}` } })
-      .then(checkAuth)
-      .then((body) => setOrders(body.orders || []))
-      .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить заказы"));
-  }, []);
+    try {
+      const body = await fetch(`${getApiBase()}/api/cabinet/orders`, { headers: { Authorization: `Bearer ${jwt}` } }).then(checkAuth);
+      setOrders(body.orders || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось загрузить заказы");
+    }
+  }
+
+  async function deleteOrder(orderId: string) {
+    if (!window.confirm("Удалить неоплаченный заказ?")) return;
+    const jwt = requireJwt();
+    if (!jwt) return;
+    setDeletingOrderId(orderId);
+    setError("");
+    try {
+      await fetch(`${getApiBase()}/api/cabinet/orders/${orderId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${jwt}` },
+      }).then(checkAuth);
+      await loadOrders();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось удалить заказ");
+    } finally {
+      setDeletingOrderId("");
+    }
+  }
 
   return (
     <CabinetShell title="Заказы">
@@ -105,9 +131,18 @@ export function OrdersApp() {
               <Info label="Оплачен" value={order.paid_at ? new Date(order.paid_at).toLocaleString() : "нет"} />
             </div>
             {["pending", "waiting_confirmation"].includes(order.status) && (
-              <Link href={`/cabinet/checkout?order=${order.id}`} className="mt-4 inline-flex min-h-10 items-center rounded-lg bg-[#ef233c] px-4 text-sm font-bold">
-                Продолжить оплату
-              </Link>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Link href={`/cabinet/checkout?order=${order.id}`} className="inline-flex min-h-10 items-center rounded-lg bg-[#ef233c] px-4 text-sm font-bold">
+                  Продолжить оплату
+                </Link>
+                <button
+                  onClick={() => deleteOrder(order.id)}
+                  disabled={deletingOrderId === order.id}
+                  className="min-h-10 rounded-lg border border-white/[0.12] px-4 text-sm font-bold text-white/72 disabled:opacity-50"
+                >
+                  {deletingOrderId === order.id ? "Удаляем..." : "Удалить"}
+                </button>
+              </div>
             )}
           </div>
         ))}

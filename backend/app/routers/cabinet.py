@@ -15,6 +15,7 @@ from app.schemas.billing import (
     CreateOrderResponse,
     CustomPlanConfig,
     CustomPlanQuoteResponse,
+    DeleteOrderResponse,
     OrdersResponse,
     PlansResponse,
     PlanOut,
@@ -27,6 +28,7 @@ from app.schemas.promo import RedeemPromoCodeRequest, RedeemPromoCodeResponse
 from app.schemas.telegram_link import TelegramLinkTokenResponse, TelegramStatusResponse, TelegramUnlinkResponse
 from app.services.billing_service import (
     create_order_for_user,
+    delete_unpaid_order,
     list_active_plans,
     list_user_orders,
     load_order_for_output,
@@ -110,6 +112,7 @@ async def get_orders(
     session: AsyncSession = Depends(get_db_session),
 ):
     orders = await list_user_orders(session, user_id)
+    await session.commit()
     return OrdersResponse(orders=[order_to_out(order) for order in orders])
 
 
@@ -123,6 +126,18 @@ async def create_order(
     await session.commit()
     order = await load_order_for_output(session, order.id)
     return CreateOrderResponse(ok=True, order=order_to_out(order))
+
+
+@router.delete("/orders/{order_id}", response_model=DeleteOrderResponse)
+async def delete_order(
+    order_id: UUID,
+    user_id: UUID = Depends(require_cabinet_user_id),
+    session: AsyncSession = Depends(get_db_session),
+):
+    order = await require_user_order(session, user_id, order_id)
+    await delete_unpaid_order(session, order)
+    await session.commit()
+    return DeleteOrderResponse(ok=True, deleted=True)
 
 
 @router.post("/orders/{order_id}/payment", response_model=CreateOrderResponse)

@@ -19,6 +19,11 @@ from app.utils.time import utc_now
 
 CUSTOM_ALLOWED_DURATIONS = {30, 90, 180, 365}
 CUSTOM_ALLOWED_DEVICES = {1, 3, 5, 10}
+UNPAID_ORDER_STATUSES = {
+    OrderStatus.PENDING.value,
+    OrderStatus.WAITING_CONFIRMATION.value,
+}
+UNPAID_ORDER_RETENTION_DAYS = 14
 
 
 def require_payment_configuration(payment_method: PaymentMethod) -> None:
@@ -194,6 +199,7 @@ async def load_order_for_output(session: AsyncSession, order_id: UUID) -> Order:
 
 
 async def list_user_orders(session: AsyncSession, user_id: UUID) -> list[Order]:
+    await cleanup_old_unpaid_orders(session, user_id)
     result = await session.execute(
         select(Order)
         .options(selectinload(Order.plan), selectinload(Order.subscription))
@@ -201,6 +207,31 @@ async def list_user_orders(session: AsyncSession, user_id: UUID) -> list[Order]:
         .order_by(Order.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+async def cleanup_old_unpaid_orders(session: AsyncSession, user_id: UUID) -> int:
+    cutoff = utc_now() - timedelta(days=UNPAID_ORDER_RETENTION_DAYS)
+    result = await session.execute(
+        select(Order).where(
+            Order.user_id == user_id,
+            Order.status.in_(UNPAID_ORDER_STATUSES),
+            Order.subscription_id.is_(None),
+            Order.created_at < cutoff,
+        )
+    )
+    orders = list(result.scalars().all())
+    for order in orders:
+        await session.delete(order)
+    if orders:
+        await session.flush()
+    return len(orders)
+
+
+async def delete_unpaid_order(session: AsyncSession, order: Order) -> None:
+    if order.status not in UNPAID_ORDER_STATUSES or order.subscription_id is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only unpaid orders can be deleted")
+    await write_audit_log(session, "order_deleted_by_user", user_id=order.user_id, metadata={"order_id": str(order.id)})
+    await session.delete(order)
 
 
 async def submit_order_payment(session: AsyncSession, order: Order, payment_reference: str) -> Order:

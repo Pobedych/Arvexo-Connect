@@ -251,6 +251,8 @@ TELEGRAM_BOT_TOKEN=real_bot_token
 BACKEND_API_BASE_URL=http://backend:8000
 BOT_INTERNAL_TOKEN=same_as_backend_bot_token
 SUPPORT_URL=https://t.me/arvexo_support
+ADMIN_TELEGRAM_IDS=123456789
+PAYMENT_NOTIFY_INTERVAL_SECONDS=20
 ```
 
 Run bot in production:
@@ -258,6 +260,8 @@ Run bot in production:
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build bot
 ```
+
+`ADMIN_TELEGRAM_IDS` is a comma-separated list of Telegram numeric user IDs that can receive payment notifications and confirm orders from bot buttons. You can get your ID from bots such as `@userinfobot`. Keep `BOT_INTERNAL_TOKEN` identical in backend and bot env files.
 
 ## API Checks
 
@@ -358,7 +362,7 @@ Manual USDT:
 - Set `CRYPTO_PAYMENT_ADDRESS` to the real USDT TRC20 wallet.
 - Set `RUB_USDT_RATE`, for example `100.00` if 1 USDT = 100 RUB.
 - User submits tx hash in checkout.
-- Admin confirms the order in `/admin`.
+- Admin confirms the order in `/admin` or from the Telegram admin notification button.
 
 Manual TON:
 
@@ -367,9 +371,9 @@ Manual TON:
 - Set `RUB_USDT_RATE`, for example `100.00` if 1 USDT = 100 RUB.
 - Set `TON_USDT_RATE` manually, for example `3.50` if 1 TON = 3.50 USDT.
 - Backend converts plan price from RUB to USDT and then to TON for checkout.
-- Ask users to include the shown `Arvexo Connect order <order_id>` comment when their wallet supports comments.
+- Users must include the shown `Arvexo Connect order <order_id>` text in the TON transfer comment/message.
 - User submits tx hash or transfer comment in checkout.
-- Admin confirms the order in `/admin`.
+- Admin confirms the order in `/admin` or from the Telegram admin notification button.
 
 Manual SBP:
 
@@ -377,8 +381,8 @@ Manual SBP:
 - Optional: set `SBP_PAYMENT_URL` if your bank provides a payment link.
 - Optional: set `SBP_QR_PAYLOAD` if your bank provides an SBP QR payload string.
 - Optional: set `SBP_QR_IMAGE_BASE64` if you already have a QR image as base64 PNG.
-- Checkout shows amount, recipient, order payment purpose, QR/link when configured, and asks the user to submit a bank transfer ID/comment.
-- Admin verifies the transfer manually and confirms the order.
+- Checkout shows amount, recipient, and required transfer message `Arvexo Connect order <order_id>`. Users must include this text in the SBP transfer comment/message.
+- Admin verifies the transfer manually and confirms the order in `/admin` or from the Telegram admin notification button.
 
 ## Backup and Restore
 

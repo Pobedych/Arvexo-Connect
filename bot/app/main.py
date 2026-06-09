@@ -11,6 +11,7 @@ from app.config import settings
 
 backend = BackendClient()
 pending_device_add: dict[int, str] = {}
+notified_payment_orders: set[str] = set()
 
 
 def main_menu() -> InlineKeyboardMarkup:
@@ -78,6 +79,14 @@ def device_keyboard(token: str, devices: list[dict]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def admin_payment_keyboard(order_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Подтвердить оплату", callback_data=f"admin_confirm_order:{order_id}")],
+        ]
+    )
+
+
 async def first_subscription(telegram_id: int) -> dict | None:
     subscriptions = await backend.subscriptions(telegram_id)
     active = active_subscriptions(subscriptions)
@@ -123,6 +132,45 @@ def subscription_text(subscription: dict) -> str:
         "Raw import:\n"
         f"{raw_url(subscription)}"
     )
+
+
+def format_order_amount(order: dict) -> str:
+    return f"{order.get('payment_amount') or order.get('amount')} {order.get('payment_currency') or order.get('currency')}"
+
+
+def admin_payment_text(order: dict) -> str:
+    return (
+        "Новая оплата на проверке\n\n"
+        f"Тариф: {order.get('plan_name') or order.get('plan_code') or 'Order'}\n"
+        f"К оплате: {format_order_amount(order)}\n"
+        f"Цена: {order.get('amount')} {order.get('currency')}\n"
+        f"Метод: {order.get('payment_method')}\n"
+        f"Tx/comment: {order.get('payment_reference') or order.get('tx_hash') or '-'}\n"
+        f"Сообщение в переводе должно быть: {order.get('payment_purpose') or '-'}\n"
+        f"Order ID: {order.get('id')}"
+    )
+
+
+def is_admin(telegram_id: int) -> bool:
+    return telegram_id in settings.admin_telegram_id_list
+
+
+async def notify_admins_about_payments(bot: Bot) -> None:
+    if not settings.admin_telegram_id_list:
+        return
+    while True:
+        try:
+            orders = await backend.waiting_payment_orders()
+            for order in orders:
+                order_id = str(order.get("id"))
+                if not order_id or order_id in notified_payment_orders:
+                    continue
+                for admin_id in settings.admin_telegram_id_list:
+                    await bot.send_message(admin_id, admin_payment_text(order), reply_markup=admin_payment_keyboard(order_id))
+                notified_payment_orders.add(order_id)
+        except Exception:
+            pass
+        await asyncio.sleep(max(settings.payment_notify_interval_seconds, 5))
 
 
 def repair_text(case: str) -> str:
@@ -207,6 +255,7 @@ async def send_raw_link(message: Message, telegram_id: int) -> None:
 async def main() -> None:
     bot = Bot(token=settings.telegram_bot_token)
     dp = Dispatcher()
+    asyncio.create_task(notify_admins_about_payments(bot))
 
     @dp.message(CommandStart())
     async def start(message: Message, command: CommandObject) -> None:
@@ -394,6 +443,25 @@ async def main() -> None:
         await callback.answer()
         _, case = callback.data.split(":", 1)
         await callback.message.answer(repair_text(case), reply_markup=main_menu())
+
+    @dp.callback_query(F.data.startswith("admin_confirm_order:"))
+    async def admin_confirm_order(callback: CallbackQuery) -> None:
+        if not is_admin(callback.from_user.id):
+            await callback.answer("Недостаточно прав", show_alert=True)
+            return
+        await callback.answer("Подтверждаю...")
+        order_id = callback.data.split(":", 1)[1]
+        try:
+            result = await backend.confirm_order(order_id)
+            subscription_url = result.get("subscription_url") or ""
+            await callback.message.answer(
+                "Оплата подтверждена.\n\n"
+                f"Order ID: {order_id}\n"
+                f"Подписка: {subscription_url or 'создана'}",
+                reply_markup=main_menu(),
+            )
+        except Exception:
+            await callback.message.answer("Не удалось подтвердить оплату. Проверьте админку/логи.", reply_markup=main_menu())
 
     await dp.start_polling(bot)
 

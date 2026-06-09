@@ -103,6 +103,11 @@ class OrdersResponse(BaseModel):
     orders: list[OrderOut]
 
 
+class DeleteOrderResponse(BaseModel):
+    ok: bool
+    deleted: bool
+
+
 class AdminConfirmOrderResponse(BaseModel):
     ok: bool
     order: OrderOut
