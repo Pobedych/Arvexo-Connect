@@ -38,7 +38,7 @@ from app.schemas.common import UserOut, subscription_to_out
 from app.services.access_key_service import create_access_key
 from app.models.vpn_subscription import VpnSubscription
 from app.services.billing_service import order_to_out
-from app.services.order_confirmation_service import confirm_order_in_session, subscription_url
+from app.services.order_confirmation_service import confirm_order_in_session
 from app.services.audit_service import write_audit_log
 from app.services.provisioning_service import provision_subscription, provision_subscription_for_user
 from app.services.trc20_payment_monitor import check_payments_once

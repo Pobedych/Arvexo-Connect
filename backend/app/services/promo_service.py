@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.enums import PromoCodeStatus, RoutingMode
-from app.models.plan import Plan
 from app.models.promo_code import PromoCode
 from app.models.promo_redemption import PromoRedemption
 from app.models.user import User

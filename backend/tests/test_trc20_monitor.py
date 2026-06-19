@@ -148,9 +148,6 @@ async def test_check_payments_once_no_address():
 
 @pytest.mark.asyncio
 async def test_check_payments_once_with_matching_tx(db_session, sample_trc20_tx):
-    from app.config import settings
-    from app.database import AsyncSessionLocal
-
     plan, order = await seed_test_data(db_session)
     sample_trc20_tx["to"] = "wallet_address"
 

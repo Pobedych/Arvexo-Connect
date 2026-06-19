@@ -97,7 +97,7 @@ async def test_admin_audit_log_requires_token(client):
 async def test_admin_device_limit_updates_subscription(client, session_factory):
     async with session_factory() as session:
         user = await create_user(session, display_name="Limit User")
-        subscription = await create_subscription(
+        await create_subscription(
             session=session,
             user_id=user.id,
             original_sub_url="https://xui.example/sub",
