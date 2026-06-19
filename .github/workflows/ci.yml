@@ -1,0 +1,19 @@
+name: CI
+
+# Прогоняет тесты/линт/билд на каждый push в любую ветку (кроме master/main —
+# для них то же самое уже делает checks-джоба внутри deploy.yml перед деплоем)
+# и на каждый pull request.
+on:
+  push:
+    branches-ignore:
+      - master
+      - main
+  pull_request:
+
+concurrency:
+  group: arvexo-connect-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml

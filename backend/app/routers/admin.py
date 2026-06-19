@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db_session
-from app.enums import OrderStatus, RoutingMode
+from app.enums import OrderStatus, RoutingMode, SubscriptionStatus
 from app.models.audit_log import AuditLog
 from app.models.order import Order
 from app.models.promo_code import PromoCode
@@ -41,6 +41,7 @@ from app.services.billing_service import order_to_out
 from app.services.order_confirmation_service import confirm_order_in_session, subscription_url
 from app.services.audit_service import write_audit_log
 from app.services.provisioning_service import provision_subscription, provision_subscription_for_user
+from app.services.trc20_payment_monitor import check_payments_once
 from app.services.promo_service import create_promo_code, list_promo_codes, promo_code_to_out
 from app.services.telegram_link_service import unlink_telegram_accounts
 from app.services.subscription_service import (
@@ -212,6 +213,12 @@ async def admin_create_promo_code(payload: CreatePromoCodeRequest, session: Asyn
 @router.post("/orders/{order_id}/confirm", response_model=AdminConfirmOrderResponse)
 async def confirm_order(order_id: UUID, session: AsyncSession = Depends(get_db_session)):
     return await confirm_order_in_session(session, order_id)
+
+
+@router.post("/check-trc20-payments")
+async def check_trc20_payments():
+    confirmed = await check_payments_once()
+    return {"ok": True, "confirmed_count": confirmed}
 
 
 @router.post("/users/{user_id}/subscriptions", response_model=CreateSubscriptionResponse)

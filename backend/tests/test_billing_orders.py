@@ -119,6 +119,36 @@ async def test_create_order_and_submit_payment(client, session_factory, monkeypa
 
 
 @pytest.mark.asyncio
+async def test_crypto_manual_orders_get_unique_salted_amounts(client, session_factory, monkeypatch):
+    # Регрессионный тест на Critical-фикс: без соли два заказа на один тариф получали
+    # одинаковый crypto_amount, и TRC20-монитор не мог различить, чей платёж пришёл.
+    await seed_plans(session_factory)
+    jwt = await register(client)
+    monkeypatch.setattr(settings, "rub_usdt_rate", Decimal("100.00"))
+    monkeypatch.setattr(settings, "crypto_payment_address", "test_wallet_address")
+
+    first = await client.post(
+        "/api/cabinet/orders",
+        headers={"Authorization": f"Bearer {jwt}"},
+        json={"plan_code": "base"},
+    )
+    second = await client.post(
+        "/api/cabinet/orders",
+        headers={"Authorization": f"Bearer {jwt}"},
+        json={"plan_code": "base"},
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    amount_1 = Decimal(first.json()["order"]["payment_amount"])
+    amount_2 = Decimal(second.json()["order"]["payment_amount"])
+
+    assert amount_1 != amount_2
+    for amount in (amount_1, amount_2):
+        assert Decimal("1.99") < amount <= Decimal("1.9999")
+
+
+@pytest.mark.asyncio
 async def test_create_sbp_manual_order(client, session_factory):
     await seed_plans(session_factory)
     jwt = await register(client)

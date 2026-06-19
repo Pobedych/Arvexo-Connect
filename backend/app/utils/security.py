@@ -132,7 +132,11 @@ async def require_admin_token(request: Request, x_admin_token: str | None = Head
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin token")
 
 
-async def require_bot_token(x_bot_token: str | None = Header(default=None)) -> None:
+async def require_bot_token(request: Request, x_bot_token: str | None = Header(default=None)) -> None:
+    # Раньше эта проверка не лимитировалась по частоте, в отличие от require_admin_token
+    # (Medium, см. SECURITY_REVIEW.md, п.6) — несущественно при сохранности самого токена,
+    # но не давало защиты от перебора, если токен утечёт.
+    await enforce_rate_limit(request, "bot", settings.bot_rate_limit_per_minute)
     if not x_bot_token or not constant_time_equal(x_bot_token, settings.bot_internal_token):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bot token")
 

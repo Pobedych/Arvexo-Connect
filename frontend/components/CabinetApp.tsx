@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { Copy, LogOut, ShieldCheck } from "lucide-react";
+
+const ACCENT = "#E5402C";
+const SUCCESS = "#1FB46A";
 
 type Subscription = {
   token: string;
@@ -44,15 +46,17 @@ const statusLabels: Record<string, string> = {
   trial: "Тест",
   expired: "Истекла",
   disabled: "Отключена",
-  provisioning_failed: "Готовится"
+  provisioning_failed: "Готовится",
 };
 
 const statusGroups = [
-  { title: "Активные", statuses: ["active"] },
-  { title: "Тестовые", statuses: ["trial"] },
-  { title: "Истекшие", statuses: ["expired", "provisioning_failed"] },
-  { title: "Отключённые", statuses: ["disabled"] }
+  { title: "АКТИВНЫЕ",    statuses: ["active"] },
+  { title: "ТЕСТОВЫЕ",    statuses: ["trial"] },
+  { title: "ИСТЁКШИЕ",    statuses: ["expired", "provisioning_failed"] },
+  { title: "ОТКЛЮЧЁННЫЕ", statuses: ["disabled"] },
 ];
+
+/* ─── Root ───────────────────────────────────────────────────────── */
 
 export function CabinetApp() {
   const pathname = usePathname();
@@ -63,7 +67,9 @@ export function CabinetApp() {
   const [displayName, setDisplayName] = useState("");
   const [accessKey, setAccessKey] = useState("");
   const [promoCode, setPromoCode] = useState("");
-  const [jwt, setJwt] = useState(() => (typeof window === "undefined" ? "" : localStorage.getItem(JWT_STORAGE_KEY) || ""));
+  const [jwt, setJwt] = useState(() =>
+    typeof window === "undefined" ? "" : localStorage.getItem(JWT_STORAGE_KEY) || ""
+  );
   const [data, setData] = useState<AuthResponse | null>(null);
   const [telegramConnected, setTelegramConnected] = useState(false);
   const [telegramLink, setTelegramLink] = useState("");
@@ -89,7 +95,7 @@ export function CabinetApp() {
       setRestoringSession(true);
       try {
         const response = await fetch(`${getApiBase()}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${jwt}` }
+          headers: { Authorization: `Bearer ${jwt}` },
         });
         if (response.status === 401 || response.status === 403) {
           if (!cancelled) logout(!isLoginPage);
@@ -104,11 +110,8 @@ export function CabinetApp() {
         if (!cancelled) setRestoringSession(false);
       }
     }
-
     void restoreSession();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [data, isLoginPage, jwt]);
 
   useEffect(() => {
@@ -126,23 +129,23 @@ export function CabinetApp() {
   }
 
   async function submitAccountAuth() {
-    setLoading(true);
-    setError("");
-    setMessage("");
+    setLoading(true); setError(""); setMessage("");
     try {
       const isRegistration = authMode === "register";
       const response = await fetch(`${getApiBase()}/api/auth/${isRegistration ? "register" : "login"}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: email.trim(),
-          password,
-          ...(isRegistration && displayName.trim() ? { display_name: displayName.trim() } : {})
-        })
+          email: email.trim(), password,
+          ...(isRegistration && displayName.trim() ? { display_name: displayName.trim() } : {}),
+        }),
       });
       if (!response.ok) {
-        if (isRegistration && response.status === 409) throw new Error("Аккаунт с таким email уже есть. Переключитесь на вход.");
-        throw new Error(await readApiError(response, isRegistration ? "Не удалось создать Arvexo Account" : "Неверный email или пароль"));
+        if (isRegistration && response.status === 409)
+          throw new Error("Аккаунт с таким email уже есть. Переключитесь на вход.");
+        throw new Error(
+          await readApiError(response, isRegistration ? "Не удалось создать Arvexo Account" : "Неверный email или пароль")
+        );
       }
       applyAuthPayload((await response.json()) as AuthResponse);
     } catch (err) {
@@ -153,14 +156,12 @@ export function CabinetApp() {
   }
 
   async function loginWithAccessKey() {
-    setLoading(true);
-    setError("");
-    setMessage("");
+    setLoading(true); setError(""); setMessage("");
     try {
       const response = await fetch(`${getApiBase()}/api/auth/access-key`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ access_key: accessKey.trim() })
+        body: JSON.stringify({ access_key: accessKey.trim() }),
       });
       if (!response.ok) throw new Error("Access key не найден");
       applyAuthPayload((await response.json()) as AuthResponse);
@@ -173,24 +174,19 @@ export function CabinetApp() {
 
   async function redeemPromoCode() {
     if (!jwt || !promoCode.trim()) return;
-    setLoading(true);
-    setError("");
-    setMessage("");
+    setLoading(true); setError(""); setMessage("");
     try {
       const response = await fetch(`${getApiBase()}/api/cabinet/promo-codes/redeem`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
-        body: JSON.stringify({ code: promoCode.trim() })
+        body: JSON.stringify({ code: promoCode.trim() }),
       });
-      if (response.status === 401 || response.status === 403) {
-        logout(true);
-        return;
-      }
+      if (response.status === 401 || response.status === 403) { logout(true); return; }
       if (!response.ok) throw new Error(await readApiError(response, "Промокод не найден или уже использован"));
       const payload = (await response.json()) as { subscription: Subscription; message: string };
-      setData((current) => current ? { ...current, subscriptions: [payload.subscription, ...current.subscriptions] } : current);
+      setData((cur) => cur ? { ...cur, subscriptions: [payload.subscription, ...cur.subscriptions] } : cur);
       setPromoCode("");
-      setMessage("Промокод применен. Подписка активирована.");
+      setMessage("Промокод применён. Подписка активирована.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось применить промокод");
     } finally {
@@ -203,16 +199,10 @@ export function CabinetApp() {
     setError("");
     const response = await fetch(`${getApiBase()}/api/cabinet/telegram/link-token`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${jwt}` }
+      headers: { Authorization: `Bearer ${jwt}` },
     });
-    if (response.status === 401 || response.status === 403) {
-      logout(true);
-      return;
-    }
-    if (!response.ok) {
-      setError("Не удалось создать ссылку Telegram");
-      return;
-    }
+    if (response.status === 401 || response.status === 403) { logout(true); return; }
+    if (!response.ok) { setError("Не удалось создать ссылку Telegram"); return; }
     const payload = (await response.json()) as { telegram_link_url: string };
     setTelegramLink(payload.telegram_link_url);
     window.location.assign(payload.telegram_link_url);
@@ -225,286 +215,542 @@ export function CabinetApp() {
 
   function logout(redirectToLogin = false) {
     localStorage.removeItem(JWT_STORAGE_KEY);
-    setData(null);
-    setAccessKey("");
-    setEmail("");
-    setPassword("");
-    setJwt("");
+    setData(null); setAccessKey(""); setEmail(""); setPassword(""); setJwt("");
     if (redirectToLogin && typeof window !== "undefined") window.location.assign("/cabinet/login");
   }
 
-  if (isLoginPage && data) {
-    window.location.assign("/cabinet");
-  }
+  if (isLoginPage && data) window.location.assign("/cabinet");
 
   return (
-    <main className="min-h-screen bg-[#050505] px-4 py-8 text-white">
-      <section className="mx-auto max-w-6xl">
-        <header className="flex items-center justify-between gap-4 border-b border-white/[0.08] pb-6">
-          <Link href="/" className="flex items-center gap-3 text-lg font-semibold">
-            <span className="grid h-10 w-10 place-items-center rounded-lg border border-[#ef233c]/35 bg-[#ef233c]/10 text-[#ff2b3a]">
-              <ShieldCheck className="h-5 w-5" />
-            </span>
+    <div style={{ background: "#EEEBE3", color: "#14130F", minHeight: "100vh", fontFamily: "'Onest',sans-serif", WebkitFontSmoothing: "antialiased" }}>
+      {/* Nav */}
+      <header style={{ borderBottom: "1px solid rgba(20,19,15,.08)" }}>
+        <div style={{ maxWidth: 1180, margin: "0 auto", padding: "18px 36px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Link href="/" style={{ fontWeight: 700, fontSize: 19, letterSpacing: "-.02em", display: "flex", alignItems: "center", gap: 9 }}>
+            <span style={{ width: 9, height: 9, borderRadius: "50%", background: ACCENT, display: "inline-block" }} />
             Arvexo Connect
           </Link>
-          {data && (
-            <button onClick={() => logout()} className="inline-flex items-center gap-2 rounded-lg border border-white/[0.1] px-4 py-2 text-sm font-bold">
-              <LogOut className="h-4 w-4" /> Выйти
+          {data ? (
+            <button onClick={() => logout()} style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "none", border: "1px solid rgba(20,19,15,.14)", borderRadius: 100, padding: "10px 18px", cursor: "pointer", fontSize: 14, fontWeight: 600, color: "#57534B" }}>
+              Выйти
             </button>
+          ) : (
+            <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: 7, color: "#57534B", fontSize: 14, fontWeight: 500 }}>
+              ← На сайт
+            </Link>
           )}
-        </header>
+        </div>
+      </header>
 
-        {restoringSession && !data ? (
-          <CenteredPanel title="Восстанавливаем сессию" text="Загружаем данные кабинета." />
-        ) : !data ? (
-          <LoginPanel
-            authMode={authMode}
-            setAuthMode={setAuthMode}
-            email={email}
-            setEmail={setEmail}
-            password={password}
-            setPassword={setPassword}
-            displayName={displayName}
-            setDisplayName={setDisplayName}
-            accessKey={accessKey}
-            setAccessKey={setAccessKey}
-            loading={loading}
-            error={error}
-            submitAccountAuth={submitAccountAuth}
-            loginWithAccessKey={loginWithAccessKey}
-          />
-        ) : (
-          <div className="mt-10">
-            <div className="rounded-[28px] border border-white/[0.08] bg-[#101010] p-6 md:p-8">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff2b3a]">Arvexo Account</p>
-              <h1 className="mt-4 text-3xl font-semibold">Привет, {accountName}</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/56">
-                Управляйте всеми подписками аккаунта: активными, тестовыми, истекшими и отключёнными.
-              </p>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Link href="/cabinet/plans" className="inline-flex min-h-12 items-center rounded-lg bg-[#ef233c] px-5 text-sm font-bold">
-                  Купить подписку
-                </Link>
-                {firstSubscription && (
-                  <Link href={`/cabinet/subscription/${firstSubscription.token}`} className="inline-flex min-h-12 items-center rounded-lg border border-white/[0.12] px-5 text-sm font-bold">
-                    Открыть подписку
-                  </Link>
-                )}
-                <button onClick={createTelegramLink} className="inline-flex min-h-12 items-center rounded-lg border border-white/[0.12] px-5 text-sm font-bold">
-                  {telegramConnected ? "Telegram подключён" : "Подключить Telegram"}
-                </button>
-                <Link href="/instructions/iphone" className="inline-flex min-h-12 items-center rounded-lg border border-white/[0.12] px-5 text-sm font-bold">
-                  Открыть инструкции
-                </Link>
-                <Link href="/cabinet/support" className="inline-flex min-h-12 items-center rounded-lg border border-white/[0.12] px-5 text-sm font-bold">
-                  Поддержка
-                </Link>
-              </div>
-              {telegramLink && <a href={telegramLink} className="mt-3 block break-all text-sm font-semibold text-[#ffb3bb]">{telegramLink}</a>}
-            </div>
-
-            {message && <Notice>{message}</Notice>}
-            {error && <Notice tone="error">{error}</Notice>}
-
-            <section className="mt-8">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <h2 className="text-2xl font-semibold">Ваши подписки</h2>
-                  <p className="mt-2 text-sm text-white/45">Всего: {subscriptions.length}</p>
-                </div>
-                <Link href="/cabinet/orders" className="text-sm font-bold text-white/64 hover:text-white">История заказов</Link>
-              </div>
-
-              {!subscriptions.length ? (
-                <div className="mt-5 rounded-[24px] border border-white/[0.08] bg-[#101010] p-6">
-                  <h3 className="text-xl font-semibold">У вас пока нет подписок.</h3>
-                  <p className="mt-3 text-sm leading-6 text-white/56">Выберите тариф, чтобы получить доступ.</p>
-                  <Link href="/cabinet/plans" className="mt-5 inline-flex min-h-12 items-center rounded-lg bg-[#ef233c] px-5 text-sm font-bold">
-                    Выбрать тариф
-                  </Link>
-                  <PromoBox promoCode={promoCode} setPromoCode={setPromoCode} loading={loading} redeemPromoCode={redeemPromoCode} />
-                </div>
-              ) : (
-                <div className="mt-5 grid gap-7">
-                  {statusGroups.map((group) => {
-                    const items = subscriptions.filter((item) => group.statuses.includes(item.status));
-                    if (!items.length) return null;
-                    return (
-                      <div key={group.title}>
-                        <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white/45">{group.title}</h3>
-                        <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                          {items.map((subscription) => (
-                            <SubscriptionCard key={subscription.token} subscription={subscription} onCopy={() => copyLink(subscription)} />
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          </div>
-        )}
-      </section>
-    </main>
-  );
-}
-
-function LoginPanel(props: {
-  authMode: AuthMode;
-  setAuthMode: (mode: AuthMode) => void;
-  email: string;
-  setEmail: (value: string) => void;
-  password: string;
-  setPassword: (value: string) => void;
-  displayName: string;
-  setDisplayName: (value: string) => void;
-  accessKey: string;
-  setAccessKey: (value: string) => void;
-  loading: boolean;
-  error: string;
-  submitAccountAuth: () => void;
-  loginWithAccessKey: () => void;
-}) {
-  const { authMode, setAuthMode, loading } = props;
-  return (
-    <div className="mx-auto mt-16 max-w-xl rounded-[28px] border border-white/[0.08] bg-[#101010] p-6 md:p-8">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff2b3a]">Arvexo Account</p>
-      <h1 className="mt-4 text-4xl font-semibold">
-        {authMode === "register" ? "Создать аккаунт" : authMode === "login" ? "Войти в аккаунт" : "Вход по access key"}
-      </h1>
-      <div className="mt-6 grid grid-cols-3 rounded-xl border border-white/[0.08] bg-black/25 p-1 text-xs font-bold sm:text-sm">
-        <AuthModeButton active={authMode === "register"} onClick={() => setAuthMode("register")} label="Регистрация" />
-        <AuthModeButton active={authMode === "login"} onClick={() => setAuthMode("login")} label="Вход" />
-        <AuthModeButton active={authMode === "access-key"} onClick={() => setAuthMode("access-key")} label="Access key" />
-      </div>
-
-      {authMode === "access-key" ? (
-        <>
-          <input value={props.accessKey} onChange={(event) => props.setAccessKey(event.target.value)} placeholder="ARVX-XXXX-XXXX-XXXX" className="mt-8 min-h-12 w-full rounded-lg border border-white/[0.1] bg-black/35 px-4 text-white outline-none focus:border-[#ef233c]" />
-          <button onClick={props.loginWithAccessKey} disabled={loading} className="mt-4 min-h-12 w-full rounded-lg bg-[#ef233c] px-5 text-sm font-bold disabled:opacity-60">
-            {loading ? "Проверяем..." : "Войти по access key"}
-          </button>
-        </>
+      {restoringSession && !data ? (
+        <LoadingScreen />
+      ) : !data ? (
+        <LoginPage
+          authMode={authMode} setAuthMode={setAuthMode}
+          email={email} setEmail={setEmail}
+          password={password} setPassword={setPassword}
+          displayName={displayName} setDisplayName={setDisplayName}
+          accessKey={accessKey} setAccessKey={setAccessKey}
+          loading={loading} error={error}
+          submitAccountAuth={submitAccountAuth}
+          loginWithAccessKey={loginWithAccessKey}
+        />
       ) : (
-        <>
-          {authMode === "register" && <input value={props.displayName} onChange={(event) => props.setDisplayName(event.target.value)} placeholder="Имя" className="mt-8 min-h-12 w-full rounded-lg border border-white/[0.1] bg-black/35 px-4 text-white outline-none focus:border-[#ef233c]" />}
-          <input value={props.email} onChange={(event) => props.setEmail(event.target.value)} placeholder="email@example.com" type="email" autoComplete="email" className={`${authMode === "register" ? "mt-3" : "mt-8"} min-h-12 w-full rounded-lg border border-white/[0.1] bg-black/35 px-4 text-white outline-none focus:border-[#ef233c]`} />
-          <input value={props.password} onChange={(event) => props.setPassword(event.target.value)} placeholder="Пароль" type="password" autoComplete={authMode === "register" ? "new-password" : "current-password"} className="mt-3 min-h-12 w-full rounded-lg border border-white/[0.1] bg-black/35 px-4 text-white outline-none focus:border-[#ef233c]" />
-          <button onClick={props.submitAccountAuth} disabled={loading} className="mt-4 min-h-12 w-full rounded-lg bg-[#ef233c] px-5 text-sm font-bold disabled:opacity-60">
-            {loading ? "Проверяем..." : authMode === "register" ? "Создать Arvexo Account" : "Войти через Arvexo Account"}
-          </button>
-        </>
+        <Dashboard
+          accountName={accountName}
+          subscriptions={subscriptions}
+          firstSubscription={firstSubscription}
+          telegramConnected={telegramConnected}
+          telegramLink={telegramLink}
+          message={message}
+          error={error}
+          loading={loading}
+          promoCode={promoCode}
+          setPromoCode={setPromoCode}
+          createTelegramLink={createTelegramLink}
+          copyLink={copyLink}
+          redeemPromoCode={redeemPromoCode}
+        />
       )}
-      {props.error && <p className="mt-4 text-sm text-[#ff2b3a]">{props.error}</p>}
+
+      {/* Footer */}
+      <footer style={{ borderTop: "1px solid rgba(20,19,15,.08)", marginTop: "auto" }}>
+        <div style={{ maxWidth: 1180, margin: "0 auto", padding: "24px 36px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#A39E93" }}>© 2026 Arvexo</span>
+          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#A39E93" }}>connect.arvexo.ru</span>
+        </div>
+      </footer>
     </div>
   );
 }
 
+/* ─── Loading ────────────────────────────────────────────────────── */
+
+function LoadingScreen() {
+  return (
+    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "80px 36px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, letterSpacing: ".16em", color: "#8A857B", marginBottom: 16 }}>ARVEXO ACCOUNT</div>
+        <p style={{ fontSize: 18, fontWeight: 600 }}>Восстанавливаем сессию…</p>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Login page (two-column) ────────────────────────────────────── */
+
+function LoginPage(props: {
+  authMode: AuthMode; setAuthMode: (m: AuthMode) => void;
+  email: string; setEmail: (v: string) => void;
+  password: string; setPassword: (v: string) => void;
+  displayName: string; setDisplayName: (v: string) => void;
+  accessKey: string; setAccessKey: (v: string) => void;
+  loading: boolean; error: string;
+  submitAccountAuth: () => void;
+  loginWithAccessKey: () => void;
+}) {
+  const { authMode, setAuthMode, loading } = props;
+
+  const tabDefs: { id: AuthMode; label: string }[] = [
+    { id: "register",   label: "Регистрация" },
+    { id: "login",      label: "Вход" },
+    { id: "access-key", label: "Access key" },
+  ];
+
+  const titles: Record<AuthMode, string> = {
+    register:   "Создать аккаунт",
+    login:      "С возвращением",
+    "access-key": "Вход по ключу",
+  };
+
+  const hints: Record<AuthMode, string> = {
+    register:   "Регистрируясь, вы принимаете условия использования и политику конфиденциальности.",
+    login:      "Забыли пароль? Восстановите доступ через Telegram-бота.",
+    "access-key": "Ключ доступа выдаётся в Telegram-боте при покупке подписки.",
+  };
+
+  const ctas: Record<AuthMode, string> = {
+    register:   "Создать Arvexo Account",
+    login:      "Войти",
+    "access-key": "Войти по ключу",
+  };
+
+  return (
+    <main style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 1fr", maxWidth: 1180, margin: "0 auto", width: "100%", padding: "0 36px", alignItems: "center", gap: 80, minHeight: "calc(100vh - 130px)" }} className="login-grid">
+      {/* Left value block */}
+      <div style={{ padding: "60px 0" }}>
+        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, letterSpacing: ".16em", color: "#8A857B", marginBottom: 28 }}>ARVEXO ACCOUNT</div>
+        <h1 style={{ fontWeight: 700, fontSize: "clamp(36px,4.5vw,56px)", lineHeight: .98, letterSpacing: "-.04em", marginBottom: 24 }}>
+          Доступ к вашему{" "}
+          <em style={{ fontFamily: "'Cormorant',serif", fontStyle: "italic", fontWeight: 600, color: ACCENT }}>интернету</em>
+        </h1>
+        <p style={{ fontSize: 18, lineHeight: 1.55, color: "#4A463F", maxWidth: 420, marginBottom: 40 }}>
+          Один аккаунт — все подписки, устройства и режимы. Профиль обновляется по той же ссылке, без переустановки.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {[
+            "Smart Russia, Privacy и Global в одном профиле",
+            "Один ключ — телефон, ПК, планшет и роутер",
+            "Поддержка и выдача доступа в Telegram",
+          ].map((point) => (
+            <div key={point} style={{ display: "flex", alignItems: "center", gap: 13 }}>
+              <span style={{ width: 30, height: 30, borderRadius: 9, background: "#FBFAF7", border: "1px solid rgba(20,19,15,.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                  <path d="M5 12l5 5 9-11" stroke={ACCENT} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <span style={{ fontSize: 15.5, color: "#3B382F", fontWeight: 500 }}>{point}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Right form card */}
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div style={{ width: "100%", maxWidth: 440, background: "#FBFAF7", border: "1px solid rgba(20,19,15,.1)", borderRadius: 22, padding: 34, boxShadow: "0 30px 70px -34px rgba(20,19,15,.3)" }}>
+          <h2 style={{ fontWeight: 700, fontSize: 28, letterSpacing: "-.025em", marginBottom: 22 }}>{titles[authMode]}</h2>
+
+          {/* Tab switcher */}
+          <div style={{ display: "flex", gap: 4, background: "#EEEBE3", border: "1px solid rgba(20,19,15,.08)", borderRadius: 100, padding: 4, marginBottom: 26 }}>
+            {tabDefs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setAuthMode(t.id)}
+                style={{
+                  flex: 1, border: "none", cursor: "pointer",
+                  fontFamily: "'Onest',sans-serif", fontWeight: 600, fontSize: 13.5,
+                  padding: "10px 8px", borderRadius: 100, transition: "background .2s, color .2s",
+                  background: authMode === t.id ? "#14130F" : "transparent",
+                  color: authMode === t.id ? "#EEEBE3" : "#57534B",
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Fields */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 22 }}>
+            {authMode === "register" && (
+              <StyledInput type="text" placeholder="Имя" value={props.displayName} onChange={props.setDisplayName} />
+            )}
+            {authMode !== "access-key" && (
+              <>
+                <StyledInput type="email" placeholder="email@example.com" value={props.email} onChange={props.setEmail} autoComplete="email" />
+                <StyledInput type="password" placeholder="Пароль" value={props.password} onChange={props.setPassword} autoComplete={authMode === "register" ? "new-password" : "current-password"} />
+              </>
+            )}
+            {authMode === "access-key" && (
+              <StyledInput type="text" placeholder="ARVX-0000-0000-0000" value={props.accessKey} onChange={props.setAccessKey} />
+            )}
+          </div>
+
+          {props.error && (
+            <p style={{ fontSize: 13, color: ACCENT, marginBottom: 14 }}>{props.error}</p>
+          )}
+
+          <button
+            onClick={authMode === "access-key" ? props.loginWithAccessKey : props.submitAccountAuth}
+            disabled={loading}
+            style={{ width: "100%", border: "none", cursor: loading ? "not-allowed" : "pointer", background: ACCENT, color: "#fff", fontFamily: "'Onest',sans-serif", fontWeight: 600, fontSize: 15.5, padding: 16, borderRadius: 100, marginBottom: 18, opacity: loading ? .65 : 1, transition: "filter .2s" }}
+            onMouseEnter={(e) => !loading && (e.currentTarget.style.filter = "brightness(1.06)")}
+            onMouseLeave={(e) => (e.currentTarget.style.filter = "brightness(1)")}
+          >
+            {loading ? "Проверяем…" : ctas[authMode]}
+          </button>
+
+          <p style={{ fontSize: 13, lineHeight: 1.5, color: "#8A857B", textAlign: "center" }}>{hints[authMode]}</p>
+        </div>
+      </div>
+
+      <style>{`
+        @media (max-width: 720px) {
+          .login-grid { grid-template-columns: 1fr !important; padding-top: 40px !important; }
+          .login-grid > div:first-child { padding: 0 !important; }
+        }
+      `}</style>
+    </main>
+  );
+}
+
+function StyledInput({ type, placeholder, value, onChange, autoComplete }: {
+  type: string; placeholder: string; value: string; onChange: (v: string) => void; autoComplete?: string;
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <input
+      type={type} placeholder={placeholder} value={value}
+      autoComplete={autoComplete}
+      onChange={(e) => onChange(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      style={{
+        width: "100%", background: "#fff",
+        border: `1px solid ${focused ? ACCENT : "rgba(20,19,15,.14)"}`,
+        borderRadius: 12, padding: "15px 16px", fontSize: 15,
+        color: "#14130F", outline: "none",
+        fontFamily: "'Onest',sans-serif",
+        transition: "border-color .2s",
+      }}
+    />
+  );
+}
+
+/* ─── Dashboard ──────────────────────────────────────────────────── */
+
+function Dashboard(props: {
+  accountName: string;
+  subscriptions: Subscription[];
+  firstSubscription: Subscription | undefined;
+  telegramConnected: boolean;
+  telegramLink: string;
+  message: string;
+  error: string;
+  loading: boolean;
+  promoCode: string;
+  setPromoCode: (v: string) => void;
+  createTelegramLink: () => void;
+  copyLink: (s: Subscription) => void;
+  redeemPromoCode: () => void;
+}) {
+  const { accountName, subscriptions, firstSubscription, telegramConnected } = props;
+  const firstName = accountName.split(" ")[0] || accountName;
+
+  return (
+    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "40px 36px 80px" }}>
+      {/* Greeting card */}
+      <div style={{ background: "#14130F", color: "#EEEBE3", borderRadius: 22, padding: "40px 44px", marginBottom: 32 }}>
+        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, letterSpacing: ".16em", color: "#867F73", marginBottom: 20 }}>ARVEXO ACCOUNT</div>
+        <h1 style={{ fontWeight: 700, fontSize: "clamp(32px,3.6vw,46px)", lineHeight: 1, letterSpacing: "-.035em", marginBottom: 12 }}>
+          Привет,{" "}
+          <em style={{ fontFamily: "'Cormorant',serif", fontStyle: "italic", fontWeight: 600, color: ACCENT }}>{firstName}</em>
+        </h1>
+        <p style={{ fontSize: 15, color: "#9A958A", marginBottom: 28, maxWidth: 540 }}>
+          Управляйте всеми подписками аккаунта: активными, тестовыми, истекшими и отключёнными.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          <DarkBtn href="/cabinet/plans" accent>Купить подписку</DarkBtn>
+          {firstSubscription && (
+            <DarkBtn href={`/cabinet/subscription/${firstSubscription.token}`}>Открыть подписку</DarkBtn>
+          )}
+          <DarkBtnAction onClick={props.createTelegramLink}>
+            {telegramConnected ? "Telegram подключён" : "Подключить Telegram"}
+          </DarkBtnAction>
+          <DarkBtn href="/instructions/iphone">Инструкции</DarkBtn>
+          <DarkBtn href="/cabinet/support">Поддержка</DarkBtn>
+        </div>
+        {props.telegramLink && (
+          <a href={props.telegramLink} style={{ marginTop: 12, display: "block", fontSize: 13, color: "#9A958A", wordBreak: "break-all" }}>{props.telegramLink}</a>
+        )}
+      </div>
+
+      {/* Notices */}
+      {props.message && <Notice>{props.message}</Notice>}
+      {props.error && <Notice tone="error">{props.error}</Notice>}
+
+      {/* Subscriptions */}
+      <section style={{ marginTop: 32 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+            <h2 style={{ fontWeight: 700, fontSize: 30, letterSpacing: "-.03em" }}>Ваши подписки</h2>
+            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#8A857B" }}>Всего: {subscriptions.length}</span>
+          </div>
+          <Link href="/cabinet/orders" style={{ fontSize: 14, fontWeight: 600, color: "#57534B" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = ACCENT)}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "#57534B")}>
+            История заказов →
+          </Link>
+        </div>
+
+        {!subscriptions.length ? (
+          <EmptySubscriptions
+            promoCode={props.promoCode}
+            setPromoCode={props.setPromoCode}
+            loading={props.loading}
+            redeemPromoCode={props.redeemPromoCode}
+          />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+            {statusGroups.map((group) => {
+              const items = subscriptions.filter((s) => group.statuses.includes(s.status));
+              if (!items.length) return null;
+              return (
+                <div key={group.title}>
+                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, letterSpacing: ".14em", color: "#8A857B", marginBottom: 16 }}>{group.title}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }} className="sub-grid">
+                    {items.map((sub) => (
+                      <SubscriptionCard key={sub.token} subscription={sub} onCopy={() => props.copyLink(sub)} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <style>{`
+        @media (max-width: 860px) { .sub-grid { grid-template-columns: 1fr 1fr !important; } }
+        @media (max-width: 560px) { .sub-grid { grid-template-columns: 1fr !important; } }
+      `}</style>
+    </div>
+  );
+}
+
+function DarkBtn({ href, children, accent }: { href: string; children: ReactNode; accent?: boolean }) {
+  return (
+    <Link href={href} style={{
+      display: "inline-flex", alignItems: "center", padding: "11px 20px", borderRadius: 100,
+      fontSize: 14, fontWeight: 600, cursor: "pointer",
+      background: accent ? ACCENT : "rgba(255,255,255,.08)",
+      color: "#EEEBE3",
+    }}>
+      {children}
+    </Link>
+  );
+}
+
+function DarkBtnAction({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button onClick={onClick} style={{
+      display: "inline-flex", alignItems: "center", padding: "11px 20px", borderRadius: 100,
+      fontSize: 14, fontWeight: 600, cursor: "pointer", border: "none",
+      background: "rgba(255,255,255,.08)", color: "#EEEBE3",
+      fontFamily: "'Onest',sans-serif",
+    }}>
+      {children}
+    </button>
+  );
+}
+
+/* ─── Subscription card ──────────────────────────────────────────── */
+
 function SubscriptionCard({ subscription, onCopy }: { subscription: Subscription; onCopy: () => void }) {
+  const [copied, setCopied] = useState(false);
   const label = statusLabels[subscription.status] || subscription.status;
   const expired = ["expired", "disabled"].includes(subscription.status);
+
+  async function handleCopy() {
+    await onCopy();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  const daysLeft = subscription.days_left;
+  const daysMax = 30;
+  const daysProgress = daysLeft === null ? 100 : Math.min(100, (daysLeft / daysMax) * 100);
+  const daysLow = daysLeft !== null && daysLeft < 5;
+
+  const devicesProgress = Math.min(100, (subscription.devices_used / subscription.device_limit) * 100);
+
   return (
-    <article className="rounded-[22px] border border-white/[0.08] bg-[#101010] p-5">
-      <div className="flex items-start justify-between gap-3">
+    <article style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 22, padding: 24 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 20 }}>
         <div>
-          <h4 className="text-xl font-semibold">{subscription.plan_name || "Arvexo Connect"}</h4>
-          <p className="mt-2 text-sm text-white/56">
+          <h4 style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-.02em", marginBottom: 4 }}>
+            {subscription.plan_name || "Arvexo Connect"}
+          </h4>
+          <p style={{ fontSize: 13.5, color: "#57534B" }}>
             {label}{!expired ? ` · ${modeLabel(subscription.routing_mode)}` : ""}
           </p>
         </div>
-        <span className={`rounded-full px-3 py-1 text-xs font-bold ${badgeClass(subscription.status)}`}>{label}</span>
+        <StatusBadge status={subscription.status} label={label} />
       </div>
-      <div className="mt-5 grid gap-3">
-        <Info label="Осталось" value={subscription.days_left === null ? "без срока" : `${subscription.days_left} дней`} />
-        <Info label="Устройства" value={`${subscription.devices_used}/${subscription.device_limit}`} />
-        <Info label="Token" value={shortToken(subscription.token)} />
+
+      {/* Stat tiles */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+        <StatTile label="Осталось" value={daysLeft === null ? "без срока" : `${daysLeft} дн.`}>
+          <ProgressBar progress={daysProgress} color={daysLow ? ACCENT : SUCCESS} />
+        </StatTile>
+        <StatTile label="Устройства" value={`${subscription.devices_used} / ${subscription.device_limit}`}>
+          <ProgressBar progress={devicesProgress} color="#14130F" />
+        </StatTile>
+        <StatTile label="Token" value={shortToken(subscription.token)} mono />
       </div>
-      <div className="mt-5 flex flex-wrap gap-2">
-        <Link href={`/cabinet/subscription/${subscription.token}`} className="inline-flex min-h-10 items-center rounded-lg bg-[#ef233c] px-4 text-sm font-bold">
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <Link href={`/cabinet/subscription/${subscription.token}`}
+          style={{ display: "inline-flex", alignItems: "center", padding: "10px 20px", borderRadius: 100, background: "#14130F", color: "#EEEBE3", fontSize: 14, fontWeight: 600 }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = ACCENT)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "#14130F")}>
           Открыть
         </Link>
-        <button onClick={onCopy} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/[0.12] px-4 text-sm font-bold">
-          <Copy className="h-4 w-4" /> Скопировать
+        <button onClick={handleCopy}
+          style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 18px", borderRadius: 100, border: "1px solid rgba(20,19,15,.14)", background: "none", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Onest',sans-serif", color: "#14130F" }}>
+          {copied ? "Скопировано" : "Копировать"}
         </button>
-        {expired && <Link href="/cabinet/plans" className="inline-flex min-h-10 items-center rounded-lg border border-white/[0.12] px-4 text-sm font-bold">Продлить</Link>}
+        {expired && (
+          <Link href="/cabinet/plans"
+            style={{ display: "inline-flex", alignItems: "center", padding: "10px 18px", borderRadius: 100, border: "1px solid rgba(20,19,15,.14)", fontSize: 14, fontWeight: 600, color: "#14130F" }}>
+            Продлить
+          </Link>
+        )}
       </div>
     </article>
   );
 }
 
-function PromoBox({ promoCode, setPromoCode, loading, redeemPromoCode }: { promoCode: string; setPromoCode: (value: string) => void; loading: boolean; redeemPromoCode: () => void }) {
+function StatTile({ label, value, mono, children }: { label: string; value: string; mono?: boolean; children?: ReactNode }) {
   return (
-    <div className="mt-6 rounded-2xl border border-white/[0.08] bg-black/25 p-4">
-      <p className="text-sm font-semibold">Промокод</p>
-      <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
-        <input value={promoCode} onChange={(event) => setPromoCode(event.target.value)} placeholder="FAMILY-XXXX-XXXX" className="h-12 rounded-lg border border-white/[0.1] bg-black px-4 text-white outline-none focus:border-[#ef233c]" />
-        <button onClick={redeemPromoCode} disabled={loading || promoCode.trim().length < 4} className="min-h-12 rounded-lg bg-white px-5 text-sm font-bold text-black disabled:opacity-50">
-          Применить
-        </button>
+    <div style={{ background: "#EEEBE3", border: "1px solid rgba(20,19,15,.09)", borderRadius: 12, padding: "14px 16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: children ? 10 : 0 }}>
+        <span style={{ fontSize: 12, color: "#8A857B" }}>{label}</span>
+        <span style={{ fontFamily: mono ? "'JetBrains Mono',monospace" : undefined, fontSize: mono ? 12 : 14, fontWeight: 600 }}>{value}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ProgressBar({ progress, color }: { progress: number; color: string }) {
+  return (
+    <div style={{ height: 5, background: "rgba(20,19,15,.1)", borderRadius: 100, overflow: "hidden" }}>
+      <div style={{ height: "100%", width: `${progress}%`, background: color, borderRadius: 100, transition: "width .3s" }} />
+    </div>
+  );
+}
+
+function StatusBadge({ status, label }: { status: string; label: string }) {
+  const styles: React.CSSProperties = (() => {
+    if (status === "active") return { background: "rgba(31,180,106,.12)", color: "#1B9E5E" };
+    if (status === "trial")  return { background: `rgba(229,64,44,.1)`, color: ACCENT };
+    if (status === "expired") return { background: "rgba(20,19,15,.07)", color: "#8A857B" };
+    return { background: "rgba(20,19,15,.07)", color: "#8A857B" };
+  })();
+  return (
+    <span style={{ display: "inline-flex", padding: "5px 12px", borderRadius: 100, fontSize: 12, fontWeight: 600, ...styles }}>
+      {label}
+    </span>
+  );
+}
+
+/* ─── Empty state ────────────────────────────────────────────────── */
+
+function EmptySubscriptions({ promoCode, setPromoCode, loading, redeemPromoCode }: {
+  promoCode: string; setPromoCode: (v: string) => void; loading: boolean; redeemPromoCode: () => void;
+}) {
+  return (
+    <div style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 22, padding: "36px 32px" }}>
+      <h3 style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-.02em", marginBottom: 10 }}>У вас пока нет подписок.</h3>
+      <p style={{ fontSize: 15, color: "#57534B", lineHeight: 1.55, marginBottom: 24 }}>Выберите тариф, чтобы получить доступ.</p>
+      <Link href="/cabinet/plans"
+        style={{ display: "inline-flex", alignItems: "center", padding: "13px 26px", borderRadius: 100, background: ACCENT, color: "#fff", fontSize: 14.5, fontWeight: 600, marginBottom: 28 }}>
+        Выбрать тариф
+      </Link>
+      {/* Promo code */}
+      <div style={{ borderTop: "1px solid rgba(20,19,15,.09)", paddingTop: 24 }}>
+        <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Есть промокод?</p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input
+            value={promoCode}
+            onChange={(e) => setPromoCode(e.target.value)}
+            placeholder="FAMILY-XXXX-XXXX"
+            style={{ flex: 1, background: "#fff", border: "1px solid rgba(20,19,15,.14)", borderRadius: 12, padding: "13px 16px", fontSize: 14, color: "#14130F", outline: "none", fontFamily: "'Onest',sans-serif" }}
+          />
+          <button
+            onClick={redeemPromoCode}
+            disabled={loading || promoCode.trim().length < 4}
+            style={{ padding: "13px 22px", borderRadius: 12, background: "#14130F", color: "#EEEBE3", fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "'Onest',sans-serif", opacity: (loading || promoCode.trim().length < 4) ? .5 : 1 }}>
+            Применить
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-function CenteredPanel({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="mx-auto mt-16 max-w-xl rounded-[28px] border border-white/[0.08] bg-[#101010] p-6 md:p-8">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff2b3a]">Arvexo Account</p>
-      <h1 className="mt-4 text-3xl font-semibold">{title}</h1>
-      <p className="mt-4 text-sm text-white/56">{text}</p>
-    </div>
-  );
-}
-
-function AuthModeButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className={`min-h-10 rounded-lg px-2 transition ${active ? "bg-[#ef233c] text-white" : "text-white/56 hover:text-white"}`}>
-      {label}
-    </button>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-white/[0.08] bg-black/25 p-4">
-      <p className="text-xs text-white/45">{label}</p>
-      <p className="mt-2 break-words text-sm font-semibold">{value}</p>
-    </div>
-  );
-}
+/* ─── Notice ─────────────────────────────────────────────────────── */
 
 function Notice({ children, tone = "success" }: { children: ReactNode; tone?: "success" | "error" }) {
+  const styles = tone === "error"
+    ? { background: `rgba(229,64,44,.08)`, border: `1px solid rgba(229,64,44,.2)`, color: ACCENT }
+    : { background: "rgba(31,180,106,.08)", border: "1px solid rgba(31,180,106,.2)", color: "#1B9E5E" };
   return (
-    <p className={`mt-5 rounded-2xl border p-4 text-sm ${tone === "error" ? "border-[#ef233c]/30 bg-[#ef233c]/10 text-[#ffb3bb]" : "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"}`}>
+    <p style={{ marginTop: 16, padding: "14px 18px", borderRadius: 12, fontSize: 14, lineHeight: 1.5, ...styles }}>
       {children}
     </p>
   );
 }
 
-function badgeClass(status: string) {
-  if (status === "active") return "bg-emerald-400/12 text-emerald-100";
-  if (status === "trial") return "bg-sky-400/12 text-sky-100";
-  if (status === "expired") return "bg-amber-400/12 text-amber-100";
-  if (status === "disabled") return "bg-white/[0.08] text-white/56";
-  return "bg-[#ef233c]/12 text-[#ffb3bb]";
-}
+/* ─── Helpers ────────────────────────────────────────────────────── */
 
 function modeLabel(mode: string) {
-  if (mode === "smart") return "Smart Russia";
+  if (mode === "smart")   return "Smart Russia";
   if (mode === "privacy") return "Privacy";
-  if (mode === "global") return "Global";
+  if (mode === "global")  return "Global";
   return mode;
 }
 
 function shortToken(token: string) {
   if (token.length <= 10) return token;
-  return `${token.slice(0, 9)}...`;
+  return `${token.slice(0, 9)}…`;
 }
 
 function getApiBase() {
   if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) return "http://127.0.0.1:8012";
+  if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname))
+    return "http://127.0.0.1:8012";
   return "https://api.arvexo.ru";
 }
 
@@ -513,8 +759,6 @@ async function readApiError(response: Response, fallback: string) {
     const body = (await response.json()) as { detail?: string | { msg?: string }[] };
     if (typeof body.detail === "string" && body.detail.trim()) return body.detail;
     if (Array.isArray(body.detail) && body.detail[0]?.msg) return body.detail[0].msg;
-  } catch {
-    // Keep the fallback when the API did not return JSON.
-  }
+  } catch { /* keep fallback */ }
   return fallback;
 }

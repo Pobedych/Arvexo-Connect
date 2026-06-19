@@ -1,7 +1,12 @@
 import { InstructionPage } from "@/components/InstructionPage";
 
 export const metadata = {
-  title: "Инструкция Windows | Arvexo Connect"
+  title: "Инструкция Windows | Arvexo Connect",
+  description:
+    "Как подключить Arvexo Connect на Windows: установка Hiddify или Nekoray, добавление subscription-ссылки и выбор профиля подключения.",
+  alternates: {
+    canonical: "https://connect.arvexo.ru/instructions/windows"
+  }
 };
 
 export default function WindowsInstructionPage() {

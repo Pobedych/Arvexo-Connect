@@ -29,6 +29,9 @@ class SubscriptionOut(BaseModel):
     last_access_at: datetime | None = None
     public_subscription_url: str
     raw_subscription_url: str
+    # Заполняется только в детальном эндпоинте подписки (cabinet.py), чтобы не генерировать
+    # QR на каждый элемент списка подписок — см. SECURITY_REVIEW.md, п.11.
+    qr_image_base64: str | None = None
 
 
 def subscription_to_out(subscription: VpnSubscription) -> SubscriptionOut:

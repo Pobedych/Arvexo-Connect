@@ -1,3 +1,7 @@
+import logging
+
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -8,8 +12,19 @@ from app.routers.cabinet import router as cabinet_router
 from app.routers.health import router as health_router
 from app.routers.public_subscription import router as public_subscription_router
 from app.routers.telegram import router as telegram_router
+from app.services.trc20_payment_monitor import start_monitor, stop_monitor
 
-app = FastAPI(title=settings.app_name)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_monitor()
+    yield
+    stop_monitor()
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

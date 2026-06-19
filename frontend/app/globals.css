@@ -3,7 +3,18 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  --bg:            #EEEBE3;
+  --surface:       #FBFAF7;
+  --surface-alt:   #E6E2D8;
+  --ink:           #14130F;
+  --ink-2:         #1A1814;
+  --text-muted:    #57534B;
+  --text-faint:    #8A857B;
+  --hairline:      rgba(20,19,15,.10);
+  --hairline-md:   rgba(20,19,15,.14);
+  --accent:        #E5402C;
+  --success:       #1FB46A;
+  --white:         #FFFFFF;
 }
 
 * {
@@ -12,25 +23,23 @@
 
 html {
   scroll-behavior: smooth;
-  background: #050505;
+  background: var(--bg);
 }
 
 body {
   min-height: 100vh;
   margin: 0;
   overflow-x: hidden;
-  background: #050505;
-  color: #f5f5f5;
-  font-family:
-    Inter, Geist, "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  letter-spacing: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Onest', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
 }
 
 ::selection {
-  background: rgba(239, 35, 60, 0.42);
-  color: #ffffff;
+  background: var(--ink);
+  color: var(--bg);
 }
 
 a {
@@ -43,5 +52,24 @@ button {
 }
 
 section {
-  scroll-margin-top: 84px;
+  scroll-margin-top: 72px;
+}
+
+input {
+  font-family: inherit;
+  outline: none;
+}
+
+input::placeholder {
+  color: #A39E93;
+}
+
+@keyframes acMarquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes acPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .3; }
 }

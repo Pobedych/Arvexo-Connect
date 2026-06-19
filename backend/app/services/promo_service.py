@@ -56,14 +56,19 @@ async def redeem_promo_code(session: AsyncSession, user_id: UUID, code: str) -> 
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    promo = await find_active_promo_code(session, code)
+    # FOR UPDATE: без блокировки строки промокода два параллельных редима читали
+    # redemptions_count до инкремента и оба могли проскочить проверку лимита (Low,
+    # см. SECURITY_REVIEW.md, "Low / гигиена").
+    promo = await find_active_promo_code(session, code, lock=True)
     if promo.redemptions_count >= promo.max_redemptions:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Promo code is fully redeemed")
     if promo.expires_at and promo.expires_at <= utc_now():
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Promo code expired")
 
     existing = await session.execute(
-        select(PromoRedemption).where(PromoRedemption.promo_code_id == promo.id, PromoRedemption.user_id == user_id)
+        select(PromoRedemption)
+        .where(PromoRedemption.promo_code_id == promo.id, PromoRedemption.user_id == user_id)
+        .with_for_update()
     )
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Promo code already redeemed")
@@ -93,14 +98,17 @@ async def redeem_promo_code(session: AsyncSession, user_id: UUID, code: str) -> 
     return provisioned.subscription
 
 
-async def find_active_promo_code(session: AsyncSession, code: str) -> PromoCode:
+async def find_active_promo_code(session: AsyncSession, code: str, lock: bool = False) -> PromoCode:
     normalized = normalize_promo_code(code)
     prefix = normalized.split("-", 1)[0]
-    result = await session.execute(
+    query = (
         select(PromoCode)
         .options(selectinload(PromoCode.plan))
         .where(PromoCode.status == PromoCodeStatus.ACTIVE.value, PromoCode.code_prefix == prefix)
     )
+    if lock:
+        query = query.with_for_update()
+    result = await session.execute(query)
     for promo in result.scalars().all():
         if verify_promo_code(normalized, promo.code_hash):
             return promo

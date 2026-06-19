@@ -1,0 +1,237 @@
+{
+  "summary": {
+    "health_score": 30,
+    "business_type": "SaaS / VPN-сервис (подписочная модель, личный кабинет, Telegram-бот)",
+    "top_findings": [
+      "Отсутствует robots.txt — приватные разделы /cabinet/*, /admin, /cabinet/checkout не защищены от индексации поисковиками",
+      "Отсутствует sitemap.xml — нет ни статического файла, ни app/sitemap.ts; поисковики не получают карту сайта",
+      "11 из 12 страниц не имеют meta description (только title) — подтверждено по исходному коду (app/**/page.tsx)",
+      "Полностью отсутствует структурированная разметка (JSON-LD) — ни Organization/WebSite, ни Product/Offer для тарифов, ни FAQPage, ни HowTo для инструкций",
+      "Страницы «Политика конфиденциальности» и «Условия использования» упомянуты в футере, но не существуют (нет роутов в frontend/app), а сами ссылки в футере ведут на placeholder «#top»"
+    ],
+    "quick_wins": [
+      "Добавить meta description на все страницы кабинета/инструкций (12 файлов app/**/page.tsx, типовая правка)",
+      "Создать frontend/app/robots.ts с Disallow для /cabinet/, /admin/, /cabinet/checkout",
+      "Создать frontend/app/sitemap.ts со статическим списком публичных URL (/, /instructions/iphone, /instructions/android, /instructions/windows)",
+      "Добавить JSON-LD Organization+WebSite в app/layout.tsx и FAQPage на главной — контент FAQ уже готов в ArvexoConnectLanding.tsx",
+      "Связать страницы /instructions/* ссылками с главной — сейчас они «осиротевшие», футер ведёт на placeholder «#top»"
+    ]
+  },
+  "categories": [
+    {
+      "name": "Technical SEO",
+      "score": 30,
+      "what_works": [
+        "Корректные security-заголовки настроены в next.config.mjs: CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy",
+        "Чистая структура URL (/instructions/iphone, /cabinet/orders и т.д.), без параметров и дублей",
+        "metadataBase и lang=\"ru\" корректно заданы в layout.tsx",
+        "Сайт отдаёт контент по HTTPS (подтверждено живой выгрузкой главной страницы)"
+      ],
+      "findings": [
+        {
+          "title": "robots.txt отсутствует",
+          "severity": "Critical",
+          "description": "Прямой запрос /robots.txt возвращает пустой ответ (подтверждено также по исходному коду: в frontend/public нет robots.txt, в frontend/app нет файла robots.ts — конвенции App Router для динамической генерации). Приватные разделы /cabinet/*, /admin, /cabinet/checkout не защищены от обхода ботами.",
+          "recommendation": "Создать frontend/app/robots.ts, разрешить индексацию /, /instructions/*; запретить /cabinet/, /admin/, /cabinet/checkout."
+        },
+        {
+          "title": "sitemap.xml отсутствует",
+          "severity": "Critical",
+          "description": "Прямой запрос /sitemap.xml возвращает пустой ответ; в исходном коде нет ни статического файла, ни app/sitemap.ts.",
+          "recommendation": "Создать frontend/app/sitemap.ts со списком публичных URL и lastModified."
+        },
+        {
+          "title": "Приватные страницы индексируемы по умолчанию",
+          "severity": "High",
+          "description": "На страницах /cabinet, /cabinet/login, /admin и др. нет meta robots noindex и нет блокировки через robots.txt — то есть ничто не мешает поисковику индексировать пустые app-шеллы личного кабинета и админки.",
+          "recommendation": "Добавить export const metadata.robots = { index: false, follow: false } на все страницы /cabinet/*, /admin, либо закрыть их через robots.txt."
+        },
+        {
+          "title": "llms.txt отсутствует",
+          "severity": "Low",
+          "description": "Запрос /llms.txt возвращает пустой ответ — нет явных инструкций для AI-кроулеров.",
+          "recommendation": "Добавить llms.txt с описанием продукта и ссылками на ключевые страницы (актуально для AI Search Readiness)."
+        }
+      ]
+    },
+    {
+      "name": "Content Quality",
+      "score": 40,
+      "what_works": [
+        "Главная страница содержит содержательный, неповерхностный текст: hero, режимы Smart Russia/Privacy/Global, инфраструктура, тарифы, кейсы использования, FAQ из 5 вопросов",
+        "Страницы инструкций (/instructions/iphone, /android, /windows) дают уникальный, специфичный контент по приложениям (Happ/V2RayTun/Streisand, Hiddify/v2rayNG и т.д.)"
+      ],
+      "findings": [
+        {
+          "title": "Страницы «Политика конфиденциальности» и «Условия использования» не существуют",
+          "severity": "Critical",
+          "description": "Футер сайта ссылается на «Политика конфиденциальности» и «Условия использования», но прямые запросы /privacy и /terms возвращают пустой ответ, а в frontend/app нет соответствующих роутов. Ссылки в футере фактически ведут на placeholder «#top». Это не только SEO-проблема (сигнал доверия/E-E-A-T), но и риск с точки зрения юридического соответствия для сервиса с обработкой платежей и персональных данных.",
+          "recommendation": "Создать страницы /privacy и /terms с реальным текстом и подключить рабочие ссылки в футере вместо «#top»."
+        },
+        {
+          "title": "FAQ не размечен как FAQPage",
+          "severity": "Medium",
+          "description": "5 готовых вопросов-ответов на главной не оформлены через schema.org/FAQPage — упущена лёгкая возможность для расширенных сниппетов и AI-цитирования.",
+          "recommendation": "Обернуть существующий FAQ-блок в JSON-LD FAQPage."
+        },
+        {
+          "title": "Нет контента, формирующего тематический авторитет",
+          "severity": "Medium",
+          "description": "За пределами главной и трёх инструкций нет блога/гайдов по темам «VPN в России», «обход блокировок», «выбор протокола» и т.п. — нет точек входа из информационного поиска.",
+          "recommendation": "Запланировать минимальный контент-кластер (3-5 статей) вокруг инструкций — это сразу расширит охват низкочастотных запросов."
+        }
+      ]
+    },
+    {
+      "name": "On-Page SEO",
+      "score": 35,
+      "what_works": [
+        "На главной странице корректно заданы title, description и canonical (https://connect.arvexo.ru/)",
+        "Чистая структура заголовков на главной: ровно один <h1>, три <h2>",
+        "Заголовки title на внутренних страницах человекочитаемы и брендированы («Инструкция iPhone | Arvexo Connect» и т.д.)"
+      ],
+      "findings": [
+        {
+          "title": "Meta description отсутствует на 11 из 12 страниц",
+          "severity": "High",
+          "description": "Проверено по исходному коду: app/admin/page.tsx, app/cabinet/page.tsx, app/cabinet/login/page.tsx, app/cabinet/checkout/page.tsx, app/cabinet/orders/page.tsx, app/cabinet/plans/page.tsx, app/cabinet/settings/page.tsx, app/cabinet/subscription/[token]/page.tsx, app/cabinet/support/page.tsx, app/instructions/iphone/page.tsx, app/instructions/android/page.tsx, app/instructions/windows/page.tsx — везде export const metadata содержит только title, без description. Только app/page.tsx (главная) имеет description.",
+          "recommendation": "Добавить description во все 11 файлов. Для /instructions/* — описать конкретное приложение и платформу (это страницы с реальным поисковым потенциалом)."
+        },
+        {
+          "title": "Canonical-тег задан только на главной",
+          "severity": "Medium",
+          "description": "alternates.canonical присутствует только в app/page.tsx; на остальных страницах canonical не задан.",
+          "recommendation": "Добавить alternates.canonical на страницы /instructions/* как минимум (публичные индексируемые страницы)."
+        },
+        {
+          "title": "Страницы /instructions/* не связаны внутренними ссылками с главной",
+          "severity": "High",
+          "description": "На живой главной странице ссылки в футере (Контакты, Статус серверов, Документация и др.) ведут на placeholder «#top», а не на реальные разделы или страницы /instructions/*. Это «осиротевшие» страницы — есть валидный контент, но нет входящих внутренних ссылок, что ослабляет их шансы на индексацию и распределение веса.",
+          "recommendation": "Добавить реальные ссылки на /instructions/iphone, /instructions/android, /instructions/windows из главной навигации/футера и из личного кабинета (после получения подписки)."
+        }
+      ]
+    },
+    {
+      "name": "Schema / Structured Data",
+      "score": 5,
+      "what_works": [],
+      "findings": [
+        {
+          "title": "JSON-LD полностью отсутствует на сайте",
+          "severity": "Critical",
+          "description": "Поиск по всему фронтенду (app/, components/) не находит ни одного script[type=\"application/ld+json\"] и ни одного упоминания structured data. Нет разметки Organization, WebSite, SoftwareApplication, Product/Offer для тарифов (Start 199₽ / Connect 299₽ / Family 599₽), FAQPage или HowTo для инструкций.",
+          "recommendation": "Внедрить минимальный набор: Organization+WebSite в layout.tsx, FAQPage на главной (контент уже есть), HowTo на трёх страницах инструкций, Product/Offer для тарифных планов."
+        }
+      ]
+    },
+    {
+      "name": "Performance (Core Web Vitals)",
+      "score": null,
+      "what_works": [],
+      "findings": [
+        {
+          "title": "Категория не оценена в рамках этой сессии",
+          "severity": "Info",
+          "description": "Live-измерение LCP/INP/CLS требует Playwright/Lighthouse или Chrome MCP — в этой сессии модуль Playwright не установлен, а Claude in Chrome был недоступен (не подключён). Из исходного кода видно, что фронтенд собирается в режиме Next.js \"standalone\" без next/image (изображений на сайте нет вовсе), что снижает риск проблем с LCP по картинкам, но не заменяет реальное измерение.",
+          "recommendation": "Повторить аудит производительности после восстановления доступа к Chrome MCP или через PageSpeed Insights API (python3 scripts/pagespeed_check.py) — категория исключена из расчёта итогового Health Score, а не оценена «по умолчанию»."
+        }
+      ]
+    },
+    {
+      "name": "AI Search Readiness",
+      "score": 25,
+      "what_works": [
+        "Текст главной страницы извлекается как чистый читаемый текст (проверено через web_fetch) — нет проблем с экранированием контента для AI-кроулеров",
+        "Чёткая структура разделов (hero → режимы → тарифы → кейсы → FAQ) облегчает разбиение на цитируемые фрагменты"
+      ],
+      "findings": [
+        {
+          "title": "Нет llms.txt",
+          "severity": "Medium",
+          "description": "/llms.txt возвращает пустой ответ.",
+          "recommendation": "Добавить llms.txt с кратким описанием продукта, тарифов и ссылками на инструкции."
+        },
+        {
+          "title": "Нет Open Graph / Twitter Card метатегов",
+          "severity": "High",
+          "description": "Поиск по app/layout.tsx и всем page.tsx не находит ни одного openGraph или twitter полей в metadata. Это ослабляет качество превью при цитировании в AI-обзорах, мессенджерах (включая Telegram, через который продаётся сервис) и соцсетях.",
+          "recommendation": "Добавить openGraph/twitter в metadata layout.tsx (минимум title/description/og:image) — особенно важно, учитывая продажи через Telegram-бота."
+        },
+        {
+          "title": "Нет FAQPage/HowTo разметки для цитируемости",
+          "severity": "Medium",
+          "description": "См. категорию Schema — отсутствие structured data напрямую снижает шанс цитирования в AI Overviews/Perplexity.",
+          "recommendation": "См. рекомендацию по Schema/Structured Data."
+        }
+      ]
+    },
+    {
+      "name": "Images",
+      "score": 15,
+      "what_works": [
+        "Отсутствие изображений означает отсутствие проблем с alt-текстом или весом картинок — подтверждено: 0 тегов <img> и next/image не используется вообще в кодовой базе"
+      ],
+      "findings": [
+        {
+          "title": "Нет Open Graph изображения и иконок для соцсетей",
+          "severity": "High",
+          "description": "В frontend/public есть только icon.svg (favicon) и .gitkeep. Нет og-image, apple-touch-icon, manifest.json/site.webmanifest. При шаринге ссылки в Telegram/соцсетях превью будет пустым или дефолтным.",
+          "recommendation": "Добавить og-image (1200x630), apple-touch-icon и site.webmanifest."
+        },
+        {
+          "title": "Полное отсутствие визуального контента на сайте",
+          "severity": "Low",
+          "description": "На лендинге нет ни одной иллюстрации, скриншота интерфейса кабинета или схемы маршрутизации — упущена возможность повысить вовлечённость и доверие визуальными доказательствами продукта.",
+          "recommendation": "Рассмотреть добавление 2-3 скриншотов личного кабинета/процесса подключения на лендинг с продуманным alt-текстом."
+        }
+      ]
+    }
+  ],
+  "action_plan": {
+    "phases": [
+      {
+        "name": "Phase 1: Critical Fixes",
+        "timeframe": "Week 1",
+        "items": [
+          "Создать frontend/app/robots.ts (запретить /cabinet/, /admin/, /cabinet/checkout; разрешить /, /instructions/*)",
+          "Создать frontend/app/sitemap.ts со списком публичных URL",
+          "Создать реальные страницы /privacy и /terms, подключить рабочие ссылки в футере вместо «#top»",
+          "Добавить meta robots noindex на страницы /cabinet/*, /admin"
+        ]
+      },
+      {
+        "name": "Phase 2: High-Impact Improvements",
+        "timeframe": "Weeks 2-3",
+        "items": [
+          "Добавить meta description на все 11 страниц без него (приоритет — /instructions/*)",
+          "Добавить canonical на страницы /instructions/*",
+          "Связать /instructions/* внутренними ссылками с главной и личным кабинетом",
+          "Добавить openGraph/twitter метатеги в layout.tsx + og-image"
+        ]
+      },
+      {
+        "name": "Phase 3: Content & Authority",
+        "timeframe": "Month 2",
+        "items": [
+          "Внедрить JSON-LD: Organization+WebSite (layout.tsx), FAQPage (главная), HowTo (инструкции), Product/Offer (тарифы)",
+          "Добавить llms.txt",
+          "Запустить минимальный контент-кластер (3-5 статей) вокруг тематики VPN/обхода блокировок"
+        ]
+      },
+      {
+        "name": "Phase 4: Monitoring & Iteration",
+        "timeframe": "Ongoing",
+        "items": [
+          "Подключить Google Search Console и/или Яндекс.Вебмастер, отслеживать индексацию после публикации robots.txt/sitemap.xml",
+          "Провести замер Core Web Vitals (PageSpeed Insights / Lighthouse) — не выполнено в этом аудите",
+          "Повторный аудит изображений/визуального контента после добавления скриншотов продукта"
+        ]
+      }
+    ]
+  },
+  "artifacts": {
+    "findings_dir": "findings/",
+    "screenshots_dir": "screenshots/"
+  },
+  "methodology_note": "Аудит выполнен в условиях ограниченного доступа к окружению: Claude in Chrome был недоступен (не подключён) на протяжении всей сессии, поэтому live-рендеринг, скриншоты и Lighthouse/Core Web Vitals не снимались. Вместо этого находки получены через (1) прямые HTTP-запросы к connect.arvexo.ru (включая контрольный запрос несуществующего URL для валидации паттерна пустого ответа), и (2) прямой анализ исходного кода фронтенда в подключённой папке Arvexo-Connect (Next.js App Router) — это даёт более высокую достоверность по пунктам robots.txt, sitemap.xml, meta-тегам, JSON-LD и изображениям, чем обычный внешний аудит. Категория Performance (CWV) исключена из расчёта итогового Health Score как не оценённая; вес остальных 6 категорий (90 из 100) перенормирован до 100."
+}

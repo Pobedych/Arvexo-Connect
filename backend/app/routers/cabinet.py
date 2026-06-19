@@ -26,6 +26,7 @@ from app.schemas.common import SubscriptionOut, subscription_to_out
 from app.schemas.devices import CreateDeviceRequest, CreateDeviceResponse, DeleteDeviceResponse, DevicesResponse, DeviceOut
 from app.schemas.promo import RedeemPromoCodeRequest, RedeemPromoCodeResponse
 from app.schemas.telegram_link import TelegramLinkTokenResponse, TelegramStatusResponse, TelegramUnlinkResponse
+from app.utils.qr import qr_data_uri
 from app.services.billing_service import (
     create_order_for_user,
     delete_unpaid_order,
@@ -258,7 +259,11 @@ async def get_subscription_status(
 ):
     subscription = await require_subscription_by_token(session, token)
     require_subscription_owner(subscription.user_id, user_id)
-    return subscription_to_out(subscription)
+    output = subscription_to_out(subscription)
+    # QR раньше строился на фронтенде через api.qrserver.com с действующим
+    # subscription-токеном в URL — см. SECURITY_REVIEW.md, п.11.
+    output.qr_image_base64 = qr_data_uri(output.raw_subscription_url)
+    return output
 
 
 @router.post("/subscription/{token}/mode", response_model=ChangeModeResponse)

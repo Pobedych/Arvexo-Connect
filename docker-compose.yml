@@ -56,7 +56,7 @@ services:
     environment:
       POSTGRES_DB: arvexo_connect
       POSTGRES_USER: arvexo
-      POSTGRES_PASSWORD: arvexo_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arvexo_password}
     ports:
       - "127.0.0.1:6432:5432"
     volumes:

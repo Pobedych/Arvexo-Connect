@@ -71,6 +71,7 @@ JWT_EXPIRES_MINUTES=60
 CRYPTO_PAYMENT_NETWORK=TRC20
 CRYPTO_PAYMENT_ADDRESS=change_me_crypto_address
 RUB_USDT_RATE=100.00
+TRONGRID_API_KEY=change_me_trongrid_api_key
 TON_PAYMENT_NETWORK=TON
 TON_PAYMENT_ADDRESS=change_me_ton_address
 TON_USDT_RATE=3.50
@@ -356,11 +357,20 @@ If 3x-ui provisioning fails during admin order confirmation, the order is still 
 
 Prices are shown to users in RUB. Crypto checkout converts the RUB order amount to USDT through `RUB_USDT_RATE`.
 
-Manual USDT:
+Manual USDT (with automatic verification):
 
 - Set `CRYPTO_PAYMENT_NETWORK=TRC20`.
 - Set `CRYPTO_PAYMENT_ADDRESS` to the real USDT TRC20 wallet.
 - Set `RUB_USDT_RATE`, for example `100.00` if 1 USDT = 100 RUB.
+- Optional: set `TRONGRID_API_KEY` for higher API rate limits (free tier works without it).
+- The backend automatically checks for incoming USDT TRC20 transfers every 30 seconds via TronGrid API.
+- When a transfer matching an order's expected amount (±0.01 USDT tolerance) is detected, the order is auto-confirmed and the VPN subscription is provisioned.
+- Manual admin confirmation still works as a fallback.
+- Admin can trigger an immediate check via `POST /api/admin/check-trc20-payments`.
+
+Manual USDT (without automatic verification):
+
+- Same setup as above, but leave `TRONGRID_API_KEY` empty.
 - User submits tx hash in checkout.
 - Admin confirms the order in `/admin` or from the Telegram admin notification button.
 

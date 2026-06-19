@@ -1,7 +1,12 @@
 import { InstructionPage } from "@/components/InstructionPage";
 
 export const metadata = {
-  title: "Инструкция iPhone | Arvexo Connect"
+  title: "Инструкция iPhone | Arvexo Connect",
+  description:
+    "Как подключить Arvexo Connect на iPhone: установка Happ, V2RayTun или Streisand, добавление subscription-ссылки и выбор Reality-профиля.",
+  alternates: {
+    canonical: "https://connect.arvexo.ru/instructions/iphone"
+  }
 };
 
 export default function IPhoneInstructionPage() {

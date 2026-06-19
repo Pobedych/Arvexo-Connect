@@ -1,1347 +1,907 @@
 "use client";
 
-import { geoEquirectangular, geoPath } from "d3-geo";
-import { motion } from "framer-motion";
-import type { Feature, FeatureCollection, GeoJsonProperties, Geometry } from "geojson";
-import {
-  ArrowRight,
-  Banknote,
-  Check,
-  ChevronDown,
-  CircuitBoard,
-  DatabaseZap,
-  Globe2,
-  Headphones,
-  Laptop,
-  Layers3,
-  Menu,
-  Network,
-  Plane,
-  Router,
-  Server,
-  Shield,
-  ShieldCheck,
-  Smartphone,
-  Sparkles,
-  Split,
-  X,
-  Zap
-} from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
-import * as THREE from "three";
-import { feature } from "topojson-client";
-import type { GeometryCollection, Topology } from "topojson-specification";
-import countriesAtlas from "world-atlas/countries-110m.json";
-
-const navItems = [
-  { href: "#features", label: "Возможности" },
-  { href: "#modes", label: "Режимы" },
-  { href: "#servers", label: "Серверы" },
-  { href: "#pricing", label: "Тарифы" },
-  { href: "#how-it-works", label: "Инструкция" },
-  { href: "#support", label: "Поддержка" }
-];
+import { useEffect, useState } from "react";
 
 const JWT_STORAGE_KEY = "arvexo_cabinet_jwt";
 
-const trustItems = [
-  {
-    icon: Split,
-    title: "Smart Routing",
-    text: "Локальные сервисы открываются напрямую, зарубежные — через VPN."
-  },
-  {
-    icon: CircuitBoard,
-    title: "Dual Protocol",
-    text: "Reality и Hysteria в одной подписке для разных сетевых сценариев."
-  },
-  {
-    icon: Server,
-    title: "Multi-Node",
-    text: "Несколько серверов для стабильности, резерва и переключения маршрутов."
-  },
-  {
-    icon: Headphones,
-    title: "Human Support",
-    text: "Помощь с подключением без UUID, SNI и технической боли."
-  }
+const ACCENT = "#E5402C";
+
+const marqueeItems = [
+  "YouTube","ChatGPT","Netflix","Instagram","Spotify","Steam","Discord","Twitch",
+  "YouTube","ChatGPT","Netflix","Instagram","Spotify","Steam","Discord","Twitch",
 ];
 
-const pains = [
-  { icon: Banknote, title: "Банки ругаются на вход" },
-  { icon: Router, title: "Маркетплейсы открываются нестабильно" },
-  { icon: Globe2, title: "Локальные сервисы видят чужой регион" },
-  { icon: Zap, title: "Приходится вручную включать и выключать VPN" }
+const stats = [
+  { num: "12 000+", label: "активных пользователей" },
+  { num: "20+",     label: "узлов в нескольких странах" },
+  { num: "99.9%",   label: "аптайм инфраструктуры" },
+  { num: "< 5 мин", label: "до первого подключения" },
+];
+
+const problems = [
+  { title: "Банки ругаются на вход",    body: "Финансовые сервисы блокируют доступ при заходе с зарубежного IP." },
+  { title: "Маркетплейсы тормозят",     body: "Ozon, Wildberries и другие площадки открываются нестабильно." },
+  { title: "Чужой регион",              body: "Локальные сервисы видят зарубежный IP и показывают не тот контент." },
+  { title: "Ручные переключения",       body: "Приходится включать и выключать VPN вручную под каждый сайт." },
+];
+
+const steps = [
+  { n: 1, title: "Получаете доступ",         body: "После оплаты или выдачи ключа вы получаете одну постоянную ссылку подписки." },
+  { n: 2, title: "Импортируете в приложение",body: "Подходит для Hiddify, V2RayTun, NekoBox и других клиентов." },
+  { n: 3, title: "Меняете режим",             body: "В боте или кабинете выбираете Smart, Privacy или Global." },
+  { n: 4, title: "Обновляете подписку",       body: "Ссылка остаётся той же, но конфиг обновляется под выбранный режим." },
 ];
 
 const modes = [
   {
-    title: "Smart Russia",
-    label: "Recommended",
-    text: "Для повседневного использования в России. .ru, банки, Ozon, Яндекс, VK и другие локальные сервисы открываются напрямую. Остальное идёт через VPN.",
-    points: ["Direct local", "Foreign tunnel", "Daily mode"],
-    featured: true
+    tag: "RECOMMENDED", name: "Smart Russia", featured: true,
+    body: "Для повседневного использования в России. .ru, банки, Ozon, Яндекс, VK и другие локальные сервисы открываются напрямую. Остальное идёт через VPN.",
+    chips: ["Direct local", "Foreign tunnel", "Daily mode"],
   },
   {
-    title: "Privacy",
-    label: "Maximum tunnel",
-    text: "Почти весь трафик идёт через защищённый туннель. Подходит, когда важнее приватность и единый внешний IP.",
-    points: ["Single exit IP", "Tunnel first", "Privacy focus"]
+    tag: "MAXIMUM TUNNEL", name: "Privacy", featured: false,
+    body: "Почти весь трафик идёт через защищённый туннель. Подходит, когда важнее приватность и единый внешний IP.",
+    chips: ["Single exit IP", "Tunnel first", "Privacy focus"],
   },
   {
-    title: "Global",
-    label: "Travel ready",
-    text: "Для поездок, Китая, Ирана и нестабильных сетей. Локальные сервисы выбранной страны можно оставить напрямую, остальное пустить через VPN.",
-    points: ["Country rules", "Hard networks", "Flexible route"]
-  }
+    tag: "TRAVEL READY", name: "Global", featured: false,
+    body: "Для поездок, Китая, Ирана и нестабильных сетей. Локальные сервисы выбранной страны можно оставить напрямую, остальное пустить через VPN.",
+    chips: ["Country rules", "Hard networks", "Flexible route"],
+  },
 ];
-
-const steps = [
-  {
-    title: "Получаете доступ",
-    text: "После оплаты или выдачи ключа вы получаете одну постоянную ссылку подписки."
-  },
-  {
-    title: "Импортируете в приложение",
-    text: "Подходит для Hiddify, V2RayTun, NekoBox и других клиентов."
-  },
-  {
-    title: "Меняете режим",
-    text: "В боте или кабинете выбираете Smart, Privacy или Global."
-  },
-  {
-    title: "Обновляете подписку",
-    text: "Ссылка остаётся той же, но конфиг обновляется под выбранный режим."
-  }
-];
-
-const infra = ["Germany Node", "Netherlands Node", "Reality 443/tcp", "Hysteria 443/udp", "Backup routing", "Split routing"];
 
 const features = [
-  {
-    icon: CircuitBoard,
-    title: "Reality + Hysteria",
-    text: "Два протокола в одной подписке: TCP-стабильность и UDP-скорость."
-  },
-  {
-    icon: Network,
-    title: "Smart DNS & Routing",
-    text: "Локальные и зарубежные сервисы обрабатываются по разным правилам."
-  },
-  {
-    icon: Headphones,
-    title: "Telegram Support",
-    text: "Быстрая помощь, инструкции и выдача доступа через бота."
-  },
-  {
-    icon: Layers3,
-    title: "One Subscription",
-    text: "Одна ссылка для всех серверов, режимов и обновлений."
-  },
-  {
-    icon: Sparkles,
-    title: "No Technical Setup",
-    text: "Пользователь не видит UUID, SNI, shortId и другие сложные настройки."
-  },
-  {
-    icon: Smartphone,
-    title: "Multi-device Access",
-    text: "Подключение на телефоне, ПК, планшете и роутере."
-  }
+  { n: 1, title: "Reality + Hysteria",   body: "Два протокола в одной подписке: TCP-стабильность и UDP-скорость для разных сетевых сценариев." },
+  { n: 2, title: "Smart DNS & Routing",  body: "Локальные и зарубежные сервисы обрабатываются по разным правилам — без ручных списков." },
+  { n: 3, title: "Telegram Support",     body: "Быстрая помощь, инструкции и выдача доступа через бота. Без UUID, SNI и технической боли." },
+  { n: 4, title: "One Subscription",     body: "Одна ссылка для всех серверов, режимов и обновлений. Меняется конфиг — не ссылка." },
+  { n: 5, title: "No Technical Setup",   body: "Пользователь не видит UUID, SNI, shortId и другие сложные настройки — всё уже внутри профиля." },
+  { n: 6, title: "Multi-device Access",  body: "Подключение на телефоне, ПК, планшете и роутере. Один профиль — все экраны." },
+];
+
+const compare = [
+  { param: "Локальные сайты и банки",  old: "Ломаются, видят чужой регион",      arv: "Открываются напрямую" },
+  { param: "Переключение режимов",      old: "Вручную под каждый сайт",           arv: "Автоматически по правилам" },
+  { param: "Блокировки провайдера",     old: "Часто блокируется",                  arv: "Reality + Hysteria маскируют трафик" },
+  { param: "Если сервер упал",          old: "Теряете связь",                      arv: "Резервные узлы подхватывают сами" },
+  { param: "Настройка",                 old: "UUID, SNI, конфиги вручную",         arv: "Одна ссылка — и всё работает" },
+  { param: "Поддержка",                 old: "Тикеты на сутки",                    arv: "Живой Telegram за минуты" },
+];
+
+const testimonials = [
+  { quote: "Поставил один раз и забыл про настройки. Сбер и Ozon открываются как обычно, YouTube идёт через туннель. Именно этого не хватало.", name: "Денис К.", handle: "@denis_k", ini: "Д" },
+  { quote: "Брал для поездки в Азию — Global вытащил там, где обычные VPN просто лежали. Режим меняется без новой ссылки.", name: "Марина Т.", handle: "@marina.tv", ini: "М" },
+  { quote: "Главное — поддержка в телеге отвечает за минуты, а не за сутки. Сервер раз моргнул, меня перекинуло на резервный автоматически.", name: "Алексей Р.", handle: "@alex_r", ini: "А" },
 ];
 
 const pricing = [
   {
-    title: "Start",
-    price: "199 ₽",
-    text: "Для одного устройства и базового подключения.",
-    features: ["1 устройство", "Основной профиль", "Инструкция подключения"]
+    name: "Start", price: "199 ₽", note: "Для одного устройства и базового подключения.", featured: false,
+    perks: ["1 устройство", "Основной профиль", "Инструкция подключения"],
+    cta: "Получить доступ",
   },
   {
-    title: "Connect",
-    price: "299 ₽",
-    text: "Smart Routing, Reality + Hysteria, несколько серверов.",
-    features: ["Arvexo Route Control", "Reality + Hysteria", "Multi-node infrastructure"],
-    featured: true
+    name: "Connect", price: "299 ₽", note: "Smart Routing, Reality + Hysteria, несколько серверов.", featured: true,
+    perks: ["Arvexo Route Control", "Reality + Hysteria", "Multi-node infrastructure"],
+    cta: "Получить доступ",
   },
   {
-    title: "Family",
-    price: "599 ₽",
-    text: "Несколько устройств, поддержка и резервные профили.",
-    features: ["Несколько устройств", "Поддержка семьи", "Резервные профили"]
-  }
+    name: "Family", price: "599 ₽", note: "Несколько устройств, поддержка и резервные профили.", featured: false,
+    perks: ["Несколько устройств", "Поддержка семьи", "Резервные профили"],
+    cta: "Получить доступ",
+  },
 ];
 
-const useCases = [
-  {
-    icon: Laptop,
-    title: "Для повседневного интернета",
-    text: "Зарубежные сервисы через VPN, локальные сайты напрямую."
-  },
-  {
-    icon: Plane,
-    title: "Для поездок",
-    text: "Меняйте режим под страну и сеть."
-  },
-  {
-    icon: ShieldCheck,
-    title: "Для работы",
-    text: "Стабильный доступ к нужным сервисам без постоянного переключения."
-  },
-  {
-    icon: Headphones,
-    title: "Для семьи",
-    text: "Понятная инструкция и поддержка без технических терминов."
-  }
+const guarantees = [
+  { title: "Возврат 7 дней",              body: "Не заработает под ваш сценарий — вернём деньги без вопросов." },
+  { title: "Оплата через Telegram-бот",   body: "Доступ выдаётся сразу, без привязки карты к сайту." },
+  { title: "Без логов",                   body: "Мы не храним историю подключений и не передаём данные третьим лицам." },
 ];
 
-const faq = [
-  {
-    question: "Это обычный VPN?",
-    answer: "Нет. Arvexo Connect — это VPN-доступ с умными режимами маршрутизации."
-  },
-  {
-    question: "Российские сайты будут работать?",
-    answer:
-      "В режиме Smart Russia локальные сервисы открываются напрямую, чтобы не ломать банки, маркетплейсы и привычные сайты."
-  },
-  {
-    question: "Можно ли пустить всё через VPN?",
-    answer: "Да. Для этого есть Privacy Mode."
-  },
-  {
-    question: "Что делать, если один сервер не работает?",
-    answer: "В подписке есть резервные узлы и протоколы."
-  },
-  {
-    question: "Нужно ли разбираться в настройках?",
-    answer: "Нет. Вы выбираете режим, а конфиг обновляется автоматически."
-  }
+const faqData = [
+  { q: "Это обычный VPN?",                       a: "Нет. Arvexo сам решает, что вести через защищённый туннель, а что оставить локальным. Вы не переключаете VPN вручную — режим маршрутизации делает это за вас." },
+  { q: "Российские сайты будут работать?",        a: "Да. .ru-сайты, банки, Ozon, Яндекс, VK и госуслуги в режиме Smart Russia открываются напрямую, без VPN — поэтому они не «ругаются» на чужой регион." },
+  { q: "Можно ли пустить всё через VPN?",         a: "Да. В режиме Privacy почти весь трафик идёт через защищённый туннель с единым внешним IP — когда важнее приватность." },
+  { q: "Что делать, если один сервер не работает?", a: "Multi-node инфраструктура переключит вас на резервный узел. Подписка и ссылка остаются прежними — переустанавливать профиль не нужно." },
+  { q: "Нужно ли разбираться в настройках?",      a: "Нет. Вы не видите UUID, SNI, shortId и другие технические параметры — просто импортируете одну ссылку в приложение, и всё работает." },
 ];
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 28 },
-  visible: { opacity: 1, y: 0 }
-};
+function getApiBase() {
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname))
+    return "http://127.0.0.1:8012";
+  return "https://api.arvexo.ru";
+}
 
-const stagger = {
-  hidden: {},
-  visible: {
-    transition: {
-      staggerChildren: 0.08
-    }
-  }
-};
+/* ─── Shared primitives ──────────────────────────────────────────── */
+
+function MonoLabel({ children, dark = false }: { children: ReactNode; dark?: boolean }) {
+  return (
+    <p
+      style={{
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: "11.5px",
+        letterSpacing: ".16em",
+        color: dark ? "#867F73" : "#8A857B",
+        marginBottom: "32px",
+      }}
+    >
+      {children}
+    </p>
+  );
+}
+
+function ArrowRight({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CheckIcon({ color = ACCENT }: { color?: string }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M5 12l5 5 9-11" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CrossIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 2 }}>
+      <path d="M6 6l12 12M18 6L6 18" stroke="#B8B2A6" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}>
+      <path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5l-8-3Z" stroke={ACCENT} strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M9 12l2 2 4-4.5" stroke={ACCENT} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/* ─── Nav ────────────────────────────────────────────────────────── */
 
 export function ArvexoConnectLanding() {
-  const [menuOpen, setMenuOpen] = useState(false);
-
   return (
-    <div className="min-h-screen bg-[#050505] text-[#f5f5f5]">
-      <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_75%_0%,rgba(239,35,60,0.18),transparent_28rem),radial-gradient(circle_at_15%_18%,rgba(255,255,255,0.06),transparent_20rem),#050505]" />
-      <Header menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+    <div style={{ background: "#EEEBE3", color: "#14130F", minHeight: "100vh", overflowX: "hidden" }}>
+      <LandingNav />
       <main>
-        <Hero />
-        <TrustBar />
+        <HeroSection />
+        <MarqueeSection />
+        <StatsSection />
         <ProblemSection />
-        <RouteControl />
-        <HowItWorks />
-        <Infrastructure />
-        <Features />
-        <Pricing />
-        <UseCases />
-        <FAQ />
-        <FinalCTA />
+        <HowSection />
+        <ModesSection />
+        <FeaturesSection />
+        <CompareSection />
+        <TestimonialsSection />
+        <PricingSection />
+        <FaqSection />
+        <BigCta />
       </main>
-      <ConnectFooter />
+      <LandingFooter />
     </div>
   );
 }
 
-function Header({
-  menuOpen,
-  setMenuOpen
-}: {
-  menuOpen: boolean;
-  setMenuOpen: (value: boolean) => void;
-}) {
+function LandingNav() {
   const [accountInitial, setAccountInitial] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const jwt = localStorage.getItem(JWT_STORAGE_KEY);
-    if (!jwt) {
-      setAccountInitial("");
-      return;
-    }
-
+    if (!jwt) return;
     let cancelled = false;
-    fetch(`${getApiBase()}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${jwt}` }
-    })
-      .then((response) => {
-        if (!response.ok) {
-          localStorage.removeItem(JWT_STORAGE_KEY);
-          return null;
+    fetch(`${getApiBase()}/api/auth/me`, { headers: { Authorization: `Bearer ${jwt}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: { account?: { display_name?: string }; display_name?: string; email?: string } | null) => {
+        if (body && !cancelled) {
+          const name = body.account?.display_name || body.display_name || body.email || "A";
+          setAccountInitial(String(name).trim().slice(0, 1).toUpperCase() || "A");
         }
-        return response.json();
       })
-      .then((body) => {
-        if (!body || cancelled) return;
-        const name = body.account?.display_name || body.display_name || body.email || "A";
-        setAccountInitial(String(name).trim().slice(0, 1).toUpperCase() || "A");
-      })
-      .catch(() => {
-        if (!cancelled) setAccountInitial("");
-      });
-
-    return () => {
-      cancelled = true;
-    };
+      .catch(() => null);
+    return () => { cancelled = true; };
   }, []);
 
+  const navLinks = [
+    { href: "#feat", label: "Возможности" },
+    { href: "#modes", label: "Режимы" },
+    { href: "#price", label: "Тарифы" },
+    { href: "#faq", label: "FAQ" },
+  ];
+
   return (
-    <header className="sticky top-0 z-50 border-b border-white/[0.08] bg-[#050505]/80 backdrop-blur-xl">
-      <div className="mx-auto flex min-h-[76px] w-[min(calc(100%-32px),1180px)] items-center justify-between gap-6">
-        <a href="#top" className="flex items-center gap-3" aria-label="Arvexo Connect">
-          <span className="grid h-10 w-10 place-items-center rounded-lg border border-[#ef233c]/35 bg-[#ef233c]/10 text-[#ff2b3a] shadow-[0_0_34px_rgba(239,35,60,0.22)]">
-            <Shield className="h-5 w-5" />
-          </span>
-          <span className="text-[1.05rem] font-semibold tracking-[0] text-white">Arvexo Connect</span>
+    <header style={{
+      position: "sticky", top: 0, zIndex: 50,
+      background: "rgba(238,235,227,.88)",
+      backdropFilter: "blur(14px)",
+      borderBottom: "1px solid rgba(20,19,15,.08)",
+    }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "18px 36px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        {/* Logo */}
+        <a href="#top" style={{ fontWeight: 700, fontSize: 19, letterSpacing: "-.02em", display: "flex", alignItems: "center", gap: 9 }}>
+          <span style={{ width: 9, height: 9, borderRadius: "50%", background: ACCENT, display: "inline-block" }} />
+          Arvexo Connect
         </a>
 
-        <nav className="hidden items-center gap-7 lg:flex" aria-label="Основная навигация">
-          {navItems.map((item) => (
-            <a key={item.href} href={item.href} className="text-sm font-medium text-white/62 transition hover:text-white">
-              {item.label}
+        {/* Desktop nav */}
+        <nav style={{ display: "flex", alignItems: "center", gap: 34 }} className="hidden lg:flex">
+          {navLinks.map((l) => (
+            <a key={l.href} href={l.href} style={{ color: "#57534B", fontSize: 14.5, fontWeight: 500 }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#14130F")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#57534B")}>
+              {l.label}
             </a>
           ))}
         </nav>
 
-        <div className="hidden items-center gap-3 lg:flex">
+        {/* Desktop actions */}
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }} className="hidden lg:flex">
           {accountInitial ? (
-            <a
-              href="/cabinet"
-              aria-label="Личный кабинет"
-              className="grid h-10 w-10 place-items-center rounded-full border border-[#ef233c]/40 bg-[#ef233c]/15 text-sm font-black text-white shadow-[0_0_24px_rgba(239,35,60,0.18)] transition hover:border-[#ef233c]"
-            >
+            <a href="/cabinet" style={{ width: 36, height: 36, borderRadius: "50%", background: "#14130F", color: "#EEEBE3", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700 }}>
               {accountInitial}
             </a>
           ) : (
-            <a href="/cabinet/login" className="rounded-lg px-4 py-2 text-sm font-semibold text-white/70 transition hover:text-white">
+            <a href="/cabinet/login" style={{ color: "#57534B", fontSize: 14.5, fontWeight: 500 }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#14130F")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#57534B")}>
               Войти
             </a>
           )}
-          <a
-            href="/cabinet"
-            className="rounded-lg bg-[#ef233c] px-5 py-3 text-sm font-semibold text-white shadow-[0_0_34px_rgba(239,35,60,0.32)] transition hover:-translate-y-0.5 hover:bg-[#ff2b3a]"
-          >
-            Получить доступ
-          </a>
+          <NavCta />
         </div>
 
+        {/* Mobile burger */}
         <button
-          type="button"
-          className="grid h-11 w-11 place-items-center rounded-lg border border-white/[0.1] bg-white/[0.04] text-white lg:hidden"
-          aria-label={menuOpen ? "Закрыть меню" : "Открыть меню"}
-          aria-expanded={menuOpen}
+          className="lg:hidden"
           onClick={() => setMenuOpen(!menuOpen)}
+          style={{ background: "none", border: "1px solid rgba(20,19,15,.14)", borderRadius: 10, padding: "8px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
         >
-          {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          {menuOpen ? "✕" : "☰"}
         </button>
       </div>
 
+      {/* Mobile menu */}
       {menuOpen && (
-        <div className="mx-auto grid w-[min(calc(100%-32px),1180px)] gap-2 pb-4 lg:hidden">
-          {navItems.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="rounded-lg border border-white/[0.08] bg-white/[0.035] px-4 py-3 text-sm font-semibold text-white/76"
-              onClick={() => setMenuOpen(false)}
-            >
-              {item.label}
+        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 36px 20px", display: "flex", flexDirection: "column", gap: 8 }} className="lg:hidden">
+          {navLinks.map((l) => (
+            <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)}
+              style={{ padding: "12px 0", fontWeight: 500, color: "#57534B", borderBottom: "1px solid rgba(20,19,15,.06)" }}>
+              {l.label}
             </a>
           ))}
-          {accountInitial ? (
-            <a
-              href="/cabinet"
-              className="flex items-center justify-center gap-3 rounded-lg border border-[#ef233c]/25 bg-[#ef233c]/10 px-4 py-3 text-center text-sm font-semibold text-white"
-              onClick={() => setMenuOpen(false)}
-            >
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-[#ef233c]/20">{accountInitial}</span>
-              Личный кабинет
-            </a>
-          ) : (
-            <a
-              href="/cabinet/login"
-              className="rounded-lg border border-white/[0.1] bg-white/[0.04] px-4 py-3 text-center text-sm font-semibold text-white"
-              onClick={() => setMenuOpen(false)}
-            >
-              Войти
-            </a>
-          )}
-          <a
-            href="/cabinet"
-            className="rounded-lg bg-[#ef233c] px-4 py-3 text-center text-sm font-semibold text-white"
-            onClick={() => setMenuOpen(false)}
-          >
-            Получить доступ
-          </a>
+          <div style={{ marginTop: 8, display: "flex", gap: 10 }}>
+            <a href="/cabinet/login" style={{ flex: 1, textAlign: "center", padding: "12px 0", border: "1px solid rgba(20,19,15,.14)", borderRadius: 100, fontWeight: 600, fontSize: 14 }}>Войти</a>
+            <a href="/cabinet" style={{ flex: 1, textAlign: "center", padding: "12px 0", background: "#14130F", color: "#EEEBE3", borderRadius: 100, fontWeight: 600, fontSize: 14 }}>Получить доступ</a>
+          </div>
         </div>
       )}
     </header>
   );
 }
 
-function Hero() {
+function NavCta() {
+  const [hovered, setHovered] = useState(false);
   return (
-    <section id="top" className="relative overflow-hidden">
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.028)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.028)_1px,transparent_1px)] bg-[size:72px_72px] opacity-45" />
-      <div className="absolute left-1/2 top-0 h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-[#ef233c]/10 blur-[110px]" />
+    <a href="/cabinet"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ background: hovered ? ACCENT : "#14130F", color: "#EEEBE3", fontSize: 14, fontWeight: 600, padding: "11px 20px", borderRadius: 100, whiteSpace: "nowrap", transition: "background .2s" }}>
+      Получить доступ
+    </a>
+  );
+}
 
-      <div className="relative mx-auto grid w-[min(calc(100%-32px),1280px)] items-center gap-12 py-16 lg:grid-cols-[0.95fr_1.15fr] lg:py-20">
+/* ─── Hero ───────────────────────────────────────────────────────── */
+
+function HeroSection() {
+  return (
+    <section id="top" style={{ maxWidth: 1280, margin: "0 auto", padding: "78px 36px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 38 }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: ACCENT, animation: "acPulse 1.9s ease-in-out infinite", display: "inline-block" }} />
+        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, letterSpacing: ".16em", color: "#8A857B" }}>SMART VPN ACCESS</span>
+      </div>
+
+      <h1 style={{ fontWeight: 700, fontSize: "clamp(48px,7.2vw,92px)", lineHeight: .92, letterSpacing: "-.045em", maxWidth: 1120, textWrap: "balance" as never }}>
+        VPN, который{" "}
+        <em style={{ fontFamily: "'Cormorant',serif", fontStyle: "italic", fontWeight: 600, color: ACCENT, letterSpacing: "-.01em" }}>адаптируется</em>
+        {" "}под ваш интернет
+      </h1>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: "64px", alignItems: "end", marginTop: 54, paddingBottom: 80 }} className="hero-grid">
         <div>
-          <p className="mb-6 text-xs font-bold uppercase tracking-[0.18em] text-[#ff2b3a]">
-            SMART VPN ACCESS
+          <p style={{ fontSize: 18, lineHeight: 1.55, color: "#4A463F", maxWidth: 460, marginBottom: 32 }}>
+            Arvexo Connect направляет зарубежные сервисы через защищённый туннель, а локальные сайты, банки и маркетплейсы открывает напрямую — быстро, стабильно и без лишних настроек.
           </p>
-          <h1 className="max-w-3xl text-balance text-[clamp(2.7rem,6vw,5.9rem)] font-semibold leading-[0.98] tracking-[0] text-white">
-            VPN, который адаптируется под ваш интернет
-          </h1>
-          <p className="mt-7 max-w-2xl text-[1.05rem] leading-8 text-[#a3a3a3] md:text-lg">
-            Arvexo Connect направляет зарубежные сервисы через защищённый туннель, а локальные сайты, банки и
-            маркетплейсы открывает напрямую — быстро, стабильно и без лишних настроек.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <a
-              href="/cabinet"
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-[#ef233c] px-6 text-sm font-bold text-white shadow-[0_0_42px_rgba(239,35,60,0.34)] transition hover:-translate-y-0.5 hover:bg-[#ff2b3a]"
-            >
-              Получить доступ <ArrowRight className="h-4 w-4" />
-            </a>
-            <a
-              href="#how-it-works"
-              className="inline-flex min-h-12 items-center justify-center rounded-lg border border-white/[0.1] bg-white/[0.04] px-6 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:border-[#ef233c]/45 hover:bg-[#ef233c]/10"
-            >
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 30, flexWrap: "wrap" }}>
+            <HeroPrimaryBtn />
+            <a href="#how" style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#14130F", fontSize: 15.5, fontWeight: 600, padding: "15px 8px" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = ACCENT)}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "#14130F")}>
               Посмотреть, как работает
             </a>
           </div>
-          <p className="mt-6 text-sm font-medium text-white/48">
-            Reality + Hysteria · Smart Routing · Multi-node infrastructure
-          </p>
+          <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#8A857B", letterSpacing: ".02em" }}>
+            Reality + Hysteria · Smart Routing · Multi-node
+          </div>
         </div>
 
-        <div className="relative min-h-[430px] lg:min-h-[560px]">
-          <WorldMap />
+        {/* Product panel */}
+        <ProductPanel />
+      </div>
+
+      <style>{`
+        @media (max-width: 860px) {
+          .hero-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+    </section>
+  );
+}
+
+function HeroPrimaryBtn() {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <a href="/cabinet"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ display: "inline-flex", alignItems: "center", gap: 9, background: hovered ? ACCENT : "#14130F", color: "#EEEBE3", fontSize: 15.5, fontWeight: 600, padding: "15px 26px", borderRadius: 100, transition: "background .2s" }}>
+      Получить доступ <ArrowRight />
+    </a>
+  );
+}
+
+function ProductPanel() {
+  return (
+    <div>
+      <div style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 20, padding: 8, boxShadow: "0 30px 60px -28px rgba(20,19,15,.28)" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px 12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#1FB46A", display: "inline-block" }} />
+            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#3B382F", fontWeight: 500 }}>tunnel · active</span>
+          </div>
+          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "#A39E93" }}>node-se-04</span>
         </div>
+        {/* Rows */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          <PanelRow icon="YT" iconBg="#14130F" iconColor="#EEEBE3" title="Зарубежные сервисы" sub="через туннель · Sweden" badge="VPN" badgeStyle={{ background: ACCENT, color: "#EEEBE3" }} />
+          <PanelRow icon="₽"  iconBg="#1FB46A" iconColor="#fff"    title="Банки и госуслуги"  sub="напрямую · локально"    badge="DIRECT" badgeStyle={{ color: "#1FB46A", border: "1px solid rgba(31,180,106,.4)" }} />
+        </div>
+        {/* Metrics */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", marginTop: 8, borderTop: "1px solid rgba(20,19,15,.07)", paddingTop: 4 }}>
+          <Metric label="пинг" value="18" unit="ms" />
+          <Metric label="скорость" value="940" unit="mb" bordered />
+          <Metric label="аптайм" value="99.9" unit="%" success bordered />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PanelRow({ icon, iconBg, iconColor, title, sub, badge, badgeStyle }: {
+  icon: string; iconBg: string; iconColor: string; title: string; sub: string; badge: string; badgeStyle: React.CSSProperties;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 15px", borderRadius: 13, background: "#F1EFE9" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+        <span style={{ width: 30, height: 30, borderRadius: 9, background: iconBg, color: iconColor, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700 }}>
+          {icon}
+        </span>
+        <div>
+          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{title}</div>
+          <div style={{ fontSize: 11.5, color: "#8A857B" }}>{sub}</div>
+        </div>
+      </div>
+      <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, borderRadius: 6, padding: "4px 8px", ...badgeStyle }}>{badge}</span>
+    </div>
+  );
+}
+
+function Metric({ label, value, unit, success, bordered }: { label: string; value: string; unit: string; success?: boolean; bordered?: boolean }) {
+  return (
+    <div style={{ padding: "12px 15px", borderLeft: bordered ? "1px solid rgba(20,19,15,.07)" : undefined }}>
+      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 19, fontWeight: 500, color: success ? "#1FB46A" : undefined }}>
+        {value}<span style={{ fontSize: 11, color: "#A39E93" }}>{unit}</span>
+      </div>
+      <div style={{ fontSize: 11, color: "#8A857B" }}>{label}</div>
+    </div>
+  );
+}
+
+/* ─── Marquee ────────────────────────────────────────────────────── */
+
+function MarqueeSection() {
+  return (
+    <section style={{ borderTop: "1px solid rgba(20,19,15,.1)", borderBottom: "1px solid rgba(20,19,15,.1)", overflow: "hidden", padding: "20px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 56, width: "max-content", animation: "acMarquee 28s linear infinite" }}>
+        {marqueeItems.map((item, i) => (
+          <span key={i} style={{ display: "flex", alignItems: "center", gap: 56, fontSize: 19, fontWeight: 600, color: "#8A857B", whiteSpace: "nowrap" }}>
+            {item}
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: ACCENT, display: "inline-block" }} />
+          </span>
+        ))}
       </div>
     </section>
   );
 }
 
-function WorldMap() {
-  const [location, setLocation] = useState<IpLocation | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+/* ─── Stats ──────────────────────────────────────────────────────── */
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadLocation() {
-      try {
-        const data = await fetchIpLocation();
-
-        if (cancelled) {
-          return;
-        }
-
-        setLocation(data);
-        setStatus("ready");
-      } catch {
-        if (!cancelled) {
-          setStatus("error");
-          setLocation({
-            city: "Не удалось определить",
-            country: "проверьте доступ к IP lookup",
-            ip: "недоступен",
-            latitude: 55.7558,
-            longitude: 37.6173,
-            region: "Fallback"
-          });
-        }
-      }
-    }
-
-    loadLocation();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const label =
-    status === "loading"
-      ? "Определяем местоположение по IP"
-      : status === "error"
-        ? "IP lookup сейчас недоступен"
-        : `${location?.city}${location?.region ? `, ${location.region}` : ""}`;
-
+function StatsSection() {
   return (
-    <div
-      data-testid="ip-globe-panel"
-      className="absolute inset-0 overflow-hidden rounded-[28px] border border-white/[0.07] bg-[#070707] shadow-[0_30px_120px_rgba(0,0,0,0.55)]"
-    >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_55%_35%,rgba(239,35,60,0.24),transparent_22rem),linear-gradient(180deg,rgba(255,255,255,0.035),transparent)]" />
-      <GlobeCanvas location={location} />
-      <div
-        data-testid="ip-location-card"
-        className="absolute left-5 top-5 max-w-[min(calc(100%-40px),310px)] rounded-2xl border border-white/[0.09] bg-black/45 p-3.5 backdrop-blur-xl"
-      >
-        <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-[#ff2b3a]">IP location</p>
-        <h2 className="mt-1.5 text-lg font-semibold leading-snug text-white">{label}</h2>
-        <div className="mt-2 grid gap-1 text-xs leading-5 text-white/62">
-          <span>IP: {status === "loading" ? "запрашиваем..." : location?.ip}</span>
-          <span>Страна: {status === "loading" ? "..." : location?.country}</span>
-          <span>
-            Координаты:{" "}
-            {status === "loading" ? "..." : `${location?.latitude.toFixed(2)}, ${location?.longitude.toFixed(2)}`}
-          </span>
-        </div>
-      </div>
-      <div
-        data-testid="ip-globe-note"
-        className="absolute bottom-5 left-5 right-5 rounded-2xl border border-white/[0.08] bg-black/35 px-4 py-3 text-xs leading-5 text-white/54 backdrop-blur-xl"
-      >
-        Точка показывает примерное местоположение по публичному IP. Точность зависит от провайдера и сети.
-      </div>
-    </div>
-  );
-}
-
-function GlobeCanvas({ location }: { location: IpLocation | null }) {
-  const mountRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const mount = mountRef.current;
-
-    if (!mount) {
-      return;
-    }
-
-    const container = mount;
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
-    camera.position.set(0, 0, 5.2);
-
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    renderer.setClearColor(0x000000, 0);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    container.appendChild(renderer.domElement);
-
-    const globeGroup = new THREE.Group();
-    scene.add(globeGroup);
-
-    const worldTexture = createWorldTexture();
-    const sphere = new THREE.Mesh(
-      new THREE.SphereGeometry(1.32, 96, 96),
-      new THREE.MeshStandardMaterial({
-        color: "#ffffff",
-        emissive: "#130207",
-        emissiveIntensity: 0.18,
-        map: worldTexture,
-        metalness: 0.05,
-        roughness: 0.64
-      })
-    );
-    globeGroup.add(sphere);
-
-    const atmosphere = new THREE.Mesh(
-      new THREE.SphereGeometry(1.4, 96, 96),
-      new THREE.MeshBasicMaterial({
-        color: "#ef233c",
-        opacity: 0.1,
-        side: THREE.BackSide,
-        transparent: true
-      })
-    );
-    globeGroup.add(atmosphere);
-
-    const markerPosition = latLonToVector3(location?.latitude ?? 55.7558, location?.longitude ?? 37.6173, 1.37);
-    const marker = new THREE.Mesh(
-      new THREE.SphereGeometry(0.04, 32, 32),
-      new THREE.MeshBasicMaterial({ color: "#ff2b3a" })
-    );
-    marker.position.copy(markerPosition);
-    globeGroup.add(marker);
-
-    const markerGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(0.1, 32, 32),
-      new THREE.MeshBasicMaterial({ color: "#ef233c", opacity: 0.2, transparent: true })
-    );
-    markerGlow.position.copy(markerPosition.clone().multiplyScalar(1.005));
-    globeGroup.add(markerGlow);
-
-    const targetDirection = new THREE.Vector3(0.18, 0.08, 1).normalize();
-    globeGroup.quaternion.copy(
-      new THREE.Quaternion().setFromUnitVectors(markerPosition.clone().normalize(), targetDirection)
-    );
-    const dragState = {
-      active: false,
-      pointerId: 0,
-      startX: 0,
-      startY: 0,
-      startQuaternion: globeGroup.quaternion.clone()
-    };
-
-    const ambient = new THREE.AmbientLight(0xffffff, 1.8);
-    const key = new THREE.DirectionalLight(0xffeff1, 2.4);
-    key.position.set(2.5, 2, 4);
-    const rim = new THREE.DirectionalLight(0xef233c, 1.25);
-    rim.position.set(-3, -1, -2);
-    scene.add(ambient, key, rim);
-
-    let frame = 0;
-
-    function handlePointerDown(event: PointerEvent) {
-      dragState.active = true;
-      dragState.pointerId = event.pointerId;
-      dragState.startX = event.clientX;
-      dragState.startY = event.clientY;
-      dragState.startQuaternion.copy(globeGroup.quaternion);
-      renderer.domElement.setPointerCapture(event.pointerId);
-      renderer.domElement.style.cursor = "grabbing";
-    }
-
-    function handlePointerMove(event: PointerEvent) {
-      if (!dragState.active || event.pointerId !== dragState.pointerId) {
-        return;
-      }
-
-      const deltaX = event.clientX - dragState.startX;
-      const deltaY = event.clientY - dragState.startY;
-      const horizontal = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), deltaX * 0.006);
-      const vertical = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), deltaY * 0.004);
-
-      globeGroup.quaternion.copy(horizontal.multiply(vertical).multiply(dragState.startQuaternion));
-    }
-
-    function handlePointerUp(event: PointerEvent) {
-      if (!dragState.active || event.pointerId !== dragState.pointerId) {
-        return;
-      }
-
-      dragState.active = false;
-      renderer.domElement.releasePointerCapture(event.pointerId);
-      renderer.domElement.style.cursor = "grab";
-    }
-
-    function handleWheel(event: WheelEvent) {
-      event.preventDefault();
-      const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-      const wheelRotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), delta * 0.0025);
-      globeGroup.quaternion.premultiply(wheelRotation);
-    }
-
-    function resize() {
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-      const isDesktopPanel = window.matchMedia("(min-width: 768px)").matches;
-      renderer.setSize(width, height, false);
-      camera.aspect = width / Math.max(height, 1);
-      camera.updateProjectionMatrix();
-      globeGroup.position.set(isDesktopPanel ? 0.7 : 0, isDesktopPanel ? -0.03 : -0.08, 0);
-      globeGroup.scale.setScalar(isDesktopPanel ? 0.68 : 0.92);
-    }
-
-    function animate() {
-      frame = requestAnimationFrame(animate);
-      const pulse = 1 + Math.sin(performance.now() * 0.004) * 0.22;
-      markerGlow.scale.setScalar(pulse);
-      renderer.render(scene, camera);
-    }
-
-    resize();
-    animate();
-    renderer.domElement.style.cursor = "grab";
-    renderer.domElement.style.touchAction = "none";
-    renderer.domElement.addEventListener("pointerdown", handlePointerDown);
-    renderer.domElement.addEventListener("pointermove", handlePointerMove);
-    renderer.domElement.addEventListener("pointerup", handlePointerUp);
-    renderer.domElement.addEventListener("pointercancel", handlePointerUp);
-    renderer.domElement.addEventListener("wheel", handleWheel, { passive: false });
-    window.addEventListener("resize", resize);
-
-    return () => {
-      cancelAnimationFrame(frame);
-      renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
-      renderer.domElement.removeEventListener("pointermove", handlePointerMove);
-      renderer.domElement.removeEventListener("pointerup", handlePointerUp);
-      renderer.domElement.removeEventListener("pointercancel", handlePointerUp);
-      renderer.domElement.removeEventListener("wheel", handleWheel);
-      window.removeEventListener("resize", resize);
-      container.removeChild(renderer.domElement);
-      worldTexture.dispose();
-      sphere.geometry.dispose();
-      (sphere.material as THREE.Material).dispose();
-      atmosphere.geometry.dispose();
-      (atmosphere.material as THREE.Material).dispose();
-      marker.geometry.dispose();
-      (marker.material as THREE.Material).dispose();
-      markerGlow.geometry.dispose();
-      (markerGlow.material as THREE.Material).dispose();
-      renderer.dispose();
-    };
-  }, [location?.latitude, location?.longitude]);
-
-  return (
-    <div className="absolute inset-0" role="img" aria-label="3D Earth map with IP location">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_67%,rgba(239,35,60,0.16),transparent_15rem),radial-gradient(circle_at_50%_70%,rgba(255,255,255,0.06),transparent_17rem)] md:bg-[radial-gradient(circle_at_78%_50%,rgba(239,35,60,0.16),transparent_17rem),radial-gradient(circle_at_78%_52%,rgba(255,255,255,0.06),transparent_19rem)]" />
-      <div
-        ref={mountRef}
-        data-testid="globe-canvas-zone"
-        className="absolute bottom-[96px] left-3 right-3 top-[178px] md:inset-0"
-      />
-    </div>
-  );
-}
-
-type IpLocation = {
-  city: string;
-  country: string;
-  ip: string;
-  latitude: number;
-  longitude: number;
-  region: string;
-};
-
-type IpWhoIsResponse = {
-  success: boolean;
-  message?: string;
-  ip?: string;
-  city?: string;
-  region?: string;
-  country?: string;
-  country_code?: string;
-  latitude?: number;
-  longitude?: number;
-};
-
-function createWorldTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 2048;
-  canvas.height = 1024;
-
-  const context = canvas.getContext("2d");
-
-  if (!context) {
-    return new THREE.CanvasTexture(canvas);
-  }
-
-  const topology = countriesAtlas as unknown as WorldAtlasTopology;
-  const collection = feature(topology, topology.objects.countries) as GeoFeatureCollection;
-  const projection = geoEquirectangular()
-    .translate([canvas.width / 2, canvas.height / 2])
-    .scale(canvas.width / (2 * Math.PI));
-  const path = geoPath(projection, context);
-
-  context.fillStyle = "#07131d";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.strokeStyle = "rgba(255,255,255,0.14)";
-  context.lineWidth = 1;
-
-  for (let meridian = -180; meridian <= 180; meridian += 30) {
-    context.beginPath();
-    context.moveTo(projection([meridian, -80])?.[0] ?? 0, projection([meridian, -80])?.[1] ?? 0);
-    for (let lat = -75; lat <= 80; lat += 5) {
-      const point = projection([meridian, lat]);
-      if (point) {
-        context.lineTo(point[0], point[1]);
-      }
-    }
-    context.stroke();
-  }
-
-  for (let parallel = -60; parallel <= 60; parallel += 30) {
-    context.beginPath();
-    const start = projection([-180, parallel]);
-    if (start) {
-      context.moveTo(start[0], start[1]);
-    }
-    for (let lon = -175; lon <= 180; lon += 5) {
-      const point = projection([lon, parallel]);
-      if (point) {
-        context.lineTo(point[0], point[1]);
-      }
-    }
-    context.stroke();
-  }
-
-  for (const country of collection.features) {
-    context.beginPath();
-    path(country);
-    context.fillStyle = "rgba(245,245,245,0.64)";
-    context.fill();
-    context.strokeStyle = "rgba(255,255,255,0.42)";
-    context.lineWidth = 0.7;
-    context.stroke();
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
-  texture.needsUpdate = true;
-
-  return texture;
-}
-
-function latLonToVector3(latitude: number, longitude: number, radius: number) {
-  const phi = THREE.MathUtils.degToRad(90 - latitude);
-  const theta = THREE.MathUtils.degToRad(longitude + 180);
-
-  return new THREE.Vector3(
-    -radius * Math.sin(phi) * Math.cos(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta)
-  );
-}
-
-type CountryAtlasObjects = {
-  countries: GeometryCollection<GeoJsonProperties>;
-};
-
-type WorldAtlasTopology = Topology<CountryAtlasObjects>;
-
-type GeoCountryFeature = Feature<Geometry, GeoJsonProperties> & {
-  id?: string | number;
-};
-
-type GeoFeatureCollection = FeatureCollection<Geometry, GeoJsonProperties> & {
-  features: GeoCountryFeature[];
-};
-
-type GeoJsResponse = {
-  ip?: string;
-  city?: string;
-  region?: string;
-  country?: string;
-  country_code?: string;
-  latitude?: string;
-  longitude?: string;
-};
-
-async function fetchIpLocation(): Promise<IpLocation> {
-  try {
-    const response = await fetch("https://get.geojs.io/v1/ip/geo.json", { cache: "no-store" });
-    const data = (await response.json()) as GeoJsResponse;
-    const latitude = Number(data.latitude);
-    const longitude = Number(data.longitude);
-
-    if (!response.ok || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      throw new Error("GeoJS lookup failed");
-    }
-
-    return {
-      city: data.city || "Unknown city",
-      country: data.country || data.country_code || "Unknown country",
-      ip: data.ip || "hidden",
-      latitude,
-      longitude,
-      region: data.region || ""
-    };
-  } catch {
-    const response = await fetch(
-      "https://ipwho.is/?fields=success,message,ip,city,region,country,country_code,latitude,longitude",
-      { cache: "no-store" }
-    );
-    const data = (await response.json()) as IpWhoIsResponse;
-
-    if (!response.ok || !data.success || typeof data.latitude !== "number" || typeof data.longitude !== "number") {
-      throw new Error(data.message || "IP lookup failed");
-    }
-
-    return {
-      city: data.city || "Unknown city",
-      country: data.country || data.country_code || "Unknown country",
-      ip: data.ip || "hidden",
-      latitude: data.latitude,
-      longitude: data.longitude,
-      region: data.region || ""
-    };
-  }
-}
-
-
-function TrustBar() {
-  return (
-    <Section id="features" className="pt-6">
-      <motion.div
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: "-80px" }}
-        variants={stagger}
-        className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
-      >
-        {trustItems.map((item) => (
-          <InfoCard key={item.title} {...item} />
+    <section style={{ borderBottom: "1px solid rgba(20,19,15,.1)" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "48px 36px", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 1, background: "rgba(20,19,15,.08)" }} className="stats-grid">
+        {stats.map((s) => (
+          <div key={s.num} style={{ background: "#EEEBE3", padding: "8px 28px 8px 0" }}>
+            <div style={{ fontWeight: 700, fontSize: 44, letterSpacing: "-.04em", lineHeight: 1, marginBottom: 8 }}>{s.num}</div>
+            <div style={{ fontSize: 14, color: "#57534B", lineHeight: 1.4 }}>{s.label}</div>
+          </div>
         ))}
-      </motion.div>
-    </Section>
+      </div>
+      <style>{`
+        @media (max-width: 600px) { .stats-grid { grid-template-columns: 1fr 1fr !important; } }
+      `}</style>
+    </section>
   );
 }
+
+/* ─── Problem ────────────────────────────────────────────────────── */
 
 function ProblemSection() {
   return (
-    <Section>
-      <SectionHeader
-        kicker="Почему это важно"
-        title="Обычный VPN часто ломает привычные сайты"
-        text="Arvexo Connect решает это через умные режимы маршрутизации."
-      />
-      <motion.div
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: "-80px" }}
-        variants={stagger}
-        className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4"
-      >
-        {pains.map((pain) => (
-          <InfoCard key={pain.title} {...pain} text="" compact />
-        ))}
-      </motion.div>
-    </Section>
-  );
-}
-
-function RouteControl() {
-  return (
-    <Section id="modes">
-      <SectionHeader
-        kicker="Arvexo Route Control"
-        title="Вы сами выбираете, как должен работать интернет"
-        text="Один доступ — разные режимы подключения. Меняйте логику маршрутизации без новой ссылки и без переустановки профиля."
-      />
-      <motion.div
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: "-80px" }}
-        variants={stagger}
-        className="mt-12 grid gap-5 lg:grid-cols-3"
-      >
-        {modes.map((mode) => (
-          <motion.article
-            variants={fadeUp}
-            key={mode.title}
-            className={`group relative overflow-hidden rounded-2xl border p-7 transition hover:-translate-y-1 ${
-              mode.featured
-                ? "border-[#ef233c]/45 bg-[#141414] shadow-[0_0_60px_rgba(239,35,60,0.12)]"
-                : "border-white/[0.08] bg-[#101010]"
-            }`}
-          >
-            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#ef233c]/70 to-transparent opacity-0 transition group-hover:opacity-100" />
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#ff2b3a]">{mode.label}</p>
-            <h3 className="mt-4 text-2xl font-semibold text-white">{mode.title}</h3>
-            <p className="mt-4 min-h-[128px] text-[0.98rem] leading-7 text-[#a3a3a3]">{mode.text}</p>
-            <div className="mt-6 flex flex-wrap gap-2">
-              {mode.points.map((point) => (
-                <span key={point} className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/70">
-                  {point}
-                </span>
-              ))}
-            </div>
-            <a
-              href="/cabinet"
-              className="mt-8 inline-flex min-h-11 items-center gap-2 rounded-lg border border-white/[0.1] px-4 text-sm font-bold text-white transition hover:border-[#ef233c]/45 hover:bg-[#ef233c]/10"
-            >
-              Выбрать режим <ArrowRight className="h-4 w-4" />
-            </a>
-          </motion.article>
-        ))}
-      </motion.div>
-    </Section>
-  );
-}
-
-function HowItWorks() {
-  return (
-    <Section id="how-it-works">
-      <SectionHeader kicker="Одна ссылка" title="Одна ссылка. Разные режимы." />
-      <motion.div
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: "-80px" }}
-        variants={stagger}
-        className="mt-12 grid gap-4 lg:grid-cols-4"
-      >
-        {steps.map((step, index) => (
-          <motion.article
-            variants={fadeUp}
-            key={step.title}
-            className="relative rounded-2xl border border-white/[0.08] bg-[#101010] p-6 transition hover:-translate-y-1 hover:border-[#ef233c]/35"
-          >
-            <span className="grid h-10 w-10 place-items-center rounded-lg bg-[#ef233c]/12 text-sm font-bold text-[#ff2b3a]">
-              {index + 1}
-            </span>
-            <h3 className="mt-6 text-xl font-semibold text-white">{step.title}</h3>
-            <p className="mt-3 text-sm leading-7 text-[#a3a3a3]">{step.text}</p>
-          </motion.article>
-        ))}
-      </motion.div>
-    </Section>
-  );
-}
-
-function Infrastructure() {
-  return (
-    <Section id="servers">
-      <div className="grid items-center gap-10 lg:grid-cols-[0.95fr_1.05fr]">
-        <div>
-          <SectionHeader
-            align="left"
-            kicker="Infrastructure"
-            title="Стабильность не на одном сервере"
-            text="Arvexo Connect использует несколько узлов и резервные протоколы, чтобы подключение оставалось рабочим даже при проблемах с одним маршрутом."
-          />
-          <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {infra.map((item) => (
-              <span
-                key={item}
-                className="rounded-lg border border-white/[0.08] bg-white/[0.035] px-4 py-3 text-sm font-semibold text-white/76"
-              >
-                {item}
-              </span>
-            ))}
+    <section style={{ maxWidth: 1280, margin: "0 auto", padding: "120px 36px" }}>
+      <MonoLabel>(01) ПОЧЕМУ ЭТО ВАЖНО</MonoLabel>
+      <h2 style={{ fontWeight: 600, fontSize: "clamp(32px,4.2vw,54px)", lineHeight: 1.02, letterSpacing: "-.035em", maxWidth: 820, marginBottom: 18 }}>
+        Обычный VPN часто{" "}
+        <em style={{ fontFamily: "'Cormorant',serif", fontStyle: "italic", fontWeight: 500, color: ACCENT }}>ломает</em>
+        {" "}привычные сайты
+      </h2>
+      <p style={{ fontSize: 18, color: "#57534B", maxWidth: 520, marginBottom: 56 }}>Arvexo Connect решает это через умные режимы маршрутизации.</p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16 }} className="cards-4">
+        {problems.map((p) => (
+          <div key={p.title} style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 16, padding: "26px 24px" }}>
+            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: ACCENT, marginBottom: 32 }}>✕</div>
+            <h3 style={{ fontWeight: 600, fontSize: 18, letterSpacing: "-.015em", marginBottom: 8 }}>{p.title}</h3>
+            <p style={{ fontSize: 14, lineHeight: 1.5, color: "#8A857B" }}>{p.body}</p>
           </div>
-        </div>
-        <motion.div
-          initial={{ opacity: 0, y: 28 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          className="rounded-[28px] border border-white/[0.08] bg-[#101010] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.35)]"
-        >
-          <div className="grid gap-3">
-            <FlowNode icon={Laptop} title="User" text="Phone · Desktop · Router" />
-            <FlowLine />
-            <FlowNode icon={DatabaseZap} title="Smart Router" text="Mode rules · Subscription config" accent />
-            <FlowLine />
-            <div className="grid gap-3 md:grid-cols-3">
-              <FlowNode icon={Shield} title="Germany" text="Reality 443/tcp" small />
-              <FlowNode icon={Zap} title="Netherlands" text="Hysteria 443/udp" small />
-              <FlowNode icon={Globe2} title="Direct Local" text="Banks · .ru · services" small />
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    </Section>
-  );
-}
-
-function Features() {
-  return (
-    <Section>
-      <SectionHeader kicker="Capabilities" title="Технологии скрыты, сценарии понятны" />
-      <motion.div
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: "-80px" }}
-        variants={stagger}
-        className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3"
-      >
-        {features.map((feature) => (
-          <InfoCard key={feature.title} {...feature} />
-        ))}
-      </motion.div>
-    </Section>
-  );
-}
-
-function Pricing() {
-  return (
-    <Section id="pricing">
-      <SectionHeader
-        kicker="Pricing"
-        title="Простой доступ без лишней сложности"
-        text="Мы делаем стабильный приватный доступ, умную маршрутизацию и понятное подключение."
-      />
-      <motion.div
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: "-80px" }}
-        variants={stagger}
-        className="mt-12 grid gap-5 lg:grid-cols-3"
-      >
-        {pricing.map((plan) => (
-          <motion.article
-            variants={fadeUp}
-            key={plan.title}
-            className={`rounded-2xl border p-7 ${
-              plan.featured
-                ? "border-[#ef233c]/50 bg-[#141414] shadow-[0_0_70px_rgba(239,35,60,0.14)]"
-                : "border-white/[0.08] bg-[#101010]"
-            }`}
-          >
-            {plan.featured && (
-              <span className="mb-5 inline-flex rounded-full bg-[#ef233c]/12 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-[#ff2b3a]">
-                Popular
-              </span>
-            )}
-            <h3 className="text-2xl font-semibold text-white">{plan.title}</h3>
-            <p className="mt-4 text-[#a3a3a3]">{plan.text}</p>
-            <div className="mt-7 flex items-end gap-2">
-              <span className="text-5xl font-semibold tracking-[0] text-white">{plan.price}</span>
-              <span className="pb-2 text-sm font-semibold text-white/46">/ месяц</span>
-            </div>
-            <div className="mt-7 grid gap-3">
-              {plan.features.map((item) => (
-                <div key={item} className="flex items-center gap-3 text-sm font-medium text-white/72">
-                  <Check className="h-4 w-4 text-[#ff2b3a]" />
-                  {item}
-                </div>
-              ))}
-            </div>
-            <a
-              href="https://t.me/arvexo_support"
-              className={`mt-8 inline-flex min-h-12 w-full items-center justify-center rounded-lg text-sm font-bold transition ${
-                plan.featured
-                  ? "bg-[#ef233c] text-white hover:bg-[#ff2b3a]"
-                  : "border border-white/[0.1] bg-white/[0.04] text-white hover:border-[#ef233c]/45 hover:bg-[#ef233c]/10"
-              }`}
-            >
-              Получить доступ
-            </a>
-          </motion.article>
-        ))}
-      </motion.div>
-    </Section>
-  );
-}
-
-function UseCases() {
-  return (
-    <Section>
-      <SectionHeader kicker="Use cases" title="Для кого это" />
-      <motion.div
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: "-80px" }}
-        variants={stagger}
-        className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4"
-      >
-        {useCases.map((item) => (
-          <InfoCard key={item.title} {...item} />
-        ))}
-      </motion.div>
-    </Section>
-  );
-}
-
-function FAQ() {
-  return (
-    <Section id="support">
-      <SectionHeader kicker="FAQ" title="Частые вопросы" />
-      <div className="mx-auto mt-10 grid max-w-3xl gap-3">
-        {faq.map((item) => (
-          <details key={item.question} className="group rounded-2xl border border-white/[0.08] bg-[#101010]">
-            <summary className="grid cursor-pointer list-none grid-cols-[1fr_auto] items-center gap-5 p-5 text-base font-semibold text-white [&::-webkit-details-marker]:hidden">
-              {item.question}
-              <ChevronDown className="h-5 w-5 text-white/45 transition group-open:rotate-180 group-open:text-[#ff2b3a]" />
-            </summary>
-            <p className="px-5 pb-5 text-sm leading-7 text-[#a3a3a3]">{item.answer}</p>
-          </details>
         ))}
       </div>
-    </Section>
-  );
-}
-
-function FinalCTA() {
-  return (
-    <section className="px-4 py-20">
-      <motion.div
-        initial={{ opacity: 0, y: 28 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: "-80px" }}
-        className="mx-auto max-w-[1180px] overflow-hidden rounded-[28px] border border-[#ef233c]/25 bg-[#101010] p-8 text-center shadow-[0_0_90px_rgba(239,35,60,0.12)] md:p-14"
-      >
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff2b3a]">Arvexo Connect</p>
-        <h2 className="mx-auto mt-5 max-w-3xl text-balance text-[clamp(2rem,4vw,4rem)] font-semibold leading-tight tracking-[0] text-white">
-          Подключение, которое работает под ваш сценарий
-        </h2>
-        <p className="mx-auto mt-5 max-w-2xl text-base leading-8 text-[#a3a3a3]">
-          Smart Russia для повседневного интернета. Privacy для максимального туннеля. Global для поездок и сложных
-          сетей.
-        </p>
-        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-          <a href="/cabinet" className="inline-flex min-h-12 items-center justify-center rounded-lg bg-[#ef233c] px-6 text-sm font-bold text-white">
-            Получить Arvexo Connect
-          </a>
-          <a
-            href="https://t.me/arvexo_support"
-            className="inline-flex min-h-12 items-center justify-center rounded-lg border border-white/[0.1] px-6 text-sm font-bold text-white"
-          >
-            Написать в поддержку
-          </a>
-        </div>
-      </motion.div>
+      <style>{`
+        @media (max-width: 800px) { .cards-4 { grid-template-columns: 1fr 1fr !important; } }
+        @media (max-width: 480px) { .cards-4 { grid-template-columns: 1fr !important; } }
+      `}</style>
     </section>
   );
 }
 
-function ConnectFooter() {
-  const columns = [
-    ["Product", "Возможности", "Режимы", "Тарифы", "Инструкция", "Личный кабинет"],
-    ["Company", "Arvexo", "Контакты", "Статус серверов"],
-    ["Support", "Telegram", "FAQ", "Документация"],
-    ["Legal", "Политика конфиденциальности", "Условия использования"]
-  ];
+/* ─── How (dark) ─────────────────────────────────────────────────── */
 
+function HowSection() {
   return (
-    <footer className="border-t border-white/[0.08] bg-[#070707] py-12">
-      <div className="mx-auto grid w-[min(calc(100%-32px),1180px)] gap-10 lg:grid-cols-[1fr_1.6fr]">
-        <div>
-          <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-lg border border-[#ef233c]/35 bg-[#ef233c]/10 text-[#ff2b3a]">
-              <Shield className="h-5 w-5" />
-            </span>
-            <span className="text-lg font-semibold text-white">Arvexo Connect</span>
-          </div>
-          <p className="mt-4 max-w-sm text-sm leading-7 text-[#a3a3a3]">
-            VPN-доступ с режимами Smart Russia, Privacy и Global. Одна подписка, несколько узлов и понятное подключение.
-          </p>
+    <section id="how" style={{ background: "#14130F", color: "#EEEBE3" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "120px 36px" }}>
+        <MonoLabel dark>(02) КАК ЭТО РАБОТАЕТ</MonoLabel>
+        <h2 style={{ fontWeight: 600, fontSize: "clamp(32px,4.2vw,54px)", lineHeight: 1.02, letterSpacing: "-.035em", maxWidth: 760, marginBottom: 72 }}>
+          Одна ссылка.{" "}
+          <em style={{ fontFamily: "'Cormorant',serif", fontStyle: "italic", fontWeight: 500, color: ACCENT }}>Разные</em>
+          {" "}режимы.
+        </h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 1, background: "rgba(255,255,255,.1)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 16, overflow: "hidden" }} className="steps-grid">
+          {steps.map((s) => (
+            <div key={s.n} style={{ background: "#14130F", padding: "34px 28px" }}>
+              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: ACCENT, marginBottom: 44 }}>0{s.n}</div>
+              <h3 style={{ fontWeight: 600, fontSize: 19, letterSpacing: "-.02em", marginBottom: 11 }}>{s.title}</h3>
+              <p style={{ fontSize: 14, lineHeight: 1.55, color: "#9A958A" }}>{s.body}</p>
+            </div>
+          ))}
         </div>
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          {columns.map(([title, ...links]) => (
-            <div key={title}>
-              <h3 className="text-sm font-bold text-white">{title}</h3>
-              <div className="mt-4 grid gap-3">
-                {links.map((link) => (
-                  <a key={link} href={footerHref(link)} className="text-sm text-white/50 transition hover:text-white">
-                    {link}
-                  </a>
-                ))}
+        <div style={{ marginTop: 24, fontSize: 14, color: "#9A958A" }}>
+          Инструкции по платформам:{" "}
+          <Link href="/instructions/iphone" style={{ color: ACCENT, fontWeight: 600, marginRight: 12 }}>iPhone</Link>
+          <Link href="/instructions/android" style={{ color: ACCENT, fontWeight: 600, marginRight: 12 }}>Android</Link>
+          <Link href="/instructions/windows" style={{ color: ACCENT, fontWeight: 600 }}>Windows</Link>
+        </div>
+      </div>
+      <style>{`
+        @media (max-width: 720px) { .steps-grid { grid-template-columns: 1fr 1fr !important; } }
+        @media (max-width: 480px) { .steps-grid { grid-template-columns: 1fr !important; } }
+      `}</style>
+    </section>
+  );
+}
+
+/* ─── Modes ──────────────────────────────────────────────────────── */
+
+function ModesSection() {
+  return (
+    <section id="modes" style={{ maxWidth: 1280, margin: "0 auto", padding: "120px 36px" }}>
+      <MonoLabel>(03) РЕЖИМЫ</MonoLabel>
+      <h2 style={{ fontWeight: 600, fontSize: "clamp(32px,4.2vw,54px)", lineHeight: 1.0, letterSpacing: "-.035em", maxWidth: 840, marginBottom: 18 }}>
+        Вы сами выбираете, как должен{" "}
+        <em style={{ fontFamily: "'Cormorant',serif", fontStyle: "italic", fontWeight: 500, color: ACCENT }}>работать</em>
+        {" "}интернет
+      </h2>
+      <p style={{ fontSize: 18, color: "#57534B", maxWidth: 560, marginBottom: 56 }}>
+        Один доступ — разные режимы подключения. Меняйте логику маршрутизации без новой ссылки и без переустановки профиля.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }} className="cards-3">
+        {modes.map((m) => (
+          <ModeCard key={m.name} mode={m} />
+        ))}
+      </div>
+      <style>{`
+        @media (max-width: 720px) { .cards-3 { grid-template-columns: 1fr !important; } }
+      `}</style>
+    </section>
+  );
+}
+
+function ModeCard({ mode }: { mode: typeof modes[0] }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: "#FBFAF7",
+        border: `1px solid ${mode.featured ? ACCENT : "rgba(20,19,15,.1)"}`,
+        borderRadius: 18,
+        padding: "30px 28px",
+        display: "flex",
+        flexDirection: "column",
+        transition: "box-shadow .2s",
+        boxShadow: hovered ? "0 8px 32px rgba(20,19,15,.08)" : "none",
+      }}
+    >
+      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, letterSpacing: ".14em", color: ACCENT, marginBottom: 14 }}>{mode.tag}</div>
+      <h3 style={{ fontWeight: 600, fontSize: 24, letterSpacing: "-.02em", marginBottom: 12 }}>{mode.name}</h3>
+      <p style={{ fontSize: 14.5, lineHeight: 1.55, color: "#57534B", marginBottom: 24, flex: 1 }}>{mode.body}</p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 24 }}>
+        {mode.chips.map((c) => (
+          <span key={c} style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "#57534B", background: "#EEEBE3", border: "1px solid rgba(20,19,15,.1)", borderRadius: 100, padding: "5px 11px" }}>{c}</span>
+        ))}
+      </div>
+      <a href="/cabinet" style={{ display: "inline-flex", alignItems: "center", gap: 8, color: hovered ? ACCENT : "#14130F", fontSize: 14.5, fontWeight: 600, transition: "color .2s" }}>
+        Выбрать режим <ArrowRight size={15} />
+      </a>
+    </div>
+  );
+}
+
+/* ─── Features (editorial list) ─────────────────────────────────── */
+
+function FeaturesSection() {
+  return (
+    <section id="feat" style={{ background: "#E6E2D8" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "120px 36px" }}>
+        <MonoLabel>(04) ВОЗМОЖНОСТИ</MonoLabel>
+        <h2 style={{ fontWeight: 600, fontSize: "clamp(32px,4.2vw,54px)", lineHeight: 1.02, letterSpacing: "-.035em", maxWidth: 760, marginBottom: 64 }}>
+          Технологии скрыты,{" "}
+          <em style={{ fontFamily: "'Cormorant',serif", fontStyle: "italic", fontWeight: 500, color: ACCENT }}>сценарии</em>
+          {" "}понятны
+        </h2>
+        <div style={{ borderTop: "1px solid rgba(20,19,15,.14)" }}>
+          {features.map((f) => <FeatureRow key={f.n} feature={f} />)}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FeatureRow({ feature: f }: { feature: typeof features[0] }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: "grid", gridTemplateColumns: "80px 1fr 1.1fr", gap: 32,
+        alignItems: "start", padding: "30px 8px",
+        borderBottom: "1px solid rgba(20,19,15,.14)", cursor: "default",
+        background: hovered ? "rgba(20,19,15,.03)" : "transparent",
+        transition: "background .15s",
+      }}
+      className="feat-row"
+    >
+      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: ACCENT, paddingTop: 5 }}>0{f.n}</div>
+      <h3 style={{ fontWeight: 600, fontSize: 25, letterSpacing: "-.025em" }}>{f.title}</h3>
+      <p style={{ fontSize: 16, lineHeight: 1.55, color: "#57534B", maxWidth: 480 }}>{f.body}</p>
+    </div>
+  );
+}
+
+/* ─── Compare ────────────────────────────────────────────────────── */
+
+function CompareSection() {
+  return (
+    <section style={{ maxWidth: 1280, margin: "0 auto", padding: "120px 36px" }}>
+      <MonoLabel>(05) СРАВНЕНИЕ</MonoLabel>
+      <h2 style={{ fontWeight: 600, fontSize: "clamp(32px,4.2vw,54px)", lineHeight: 1.02, letterSpacing: "-.035em", maxWidth: 760, marginBottom: 56 }}>
+        Чем это{" "}
+        <em style={{ fontFamily: "'Cormorant',serif", fontStyle: "italic", fontWeight: 500, color: ACCENT }}>отличается</em>
+        {" "}от обычного VPN
+      </h2>
+      <div style={{ border: "1px solid rgba(20,19,15,.12)", borderRadius: 18, overflow: "hidden", background: "#FBFAF7" }}>
+        {/* Header row */}
+        <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", borderBottom: "1px solid rgba(20,19,15,.12)" }}>
+          <div style={{ padding: "20px 28px" }} />
+          <div style={{ padding: "20px 28px", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, letterSpacing: ".08em", color: "#8A857B" }}>ОБЫЧНЫЙ VPN</div>
+          <div style={{ padding: "20px 28px", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, letterSpacing: ".08em", color: ACCENT, background: `rgba(229,64,44,.05)`, borderLeft: "1px solid rgba(20,19,15,.12)" }}>ARVEXO CONNECT</div>
+        </div>
+        {compare.map((c, i) => (
+          <div key={i} style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", borderBottom: i < compare.length - 1 ? "1px solid rgba(20,19,15,.08)" : undefined }}>
+            <div style={{ padding: "22px 28px", fontSize: 15.5, fontWeight: 600, letterSpacing: "-.01em" }}>{c.param}</div>
+            <div style={{ padding: "22px 28px", fontSize: 14.5, color: "#8A857B", display: "flex", alignItems: "flex-start", gap: 9 }}>
+              <CrossIcon />{c.old}
+            </div>
+            <div style={{ padding: "22px 28px", fontSize: 14.5, color: "#3B382F", display: "flex", alignItems: "flex-start", gap: 9, background: "rgba(229,64,44,.05)", borderLeft: "1px solid rgba(20,19,15,.08)" }}>
+              <CheckIcon />{c.arv}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ─── Testimonials ───────────────────────────────────────────────── */
+
+function TestimonialsSection() {
+  return (
+    <section style={{ background: "#E6E2D8" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "120px 36px" }}>
+        <MonoLabel>(06) ОТЗЫВЫ</MonoLabel>
+        <h2 style={{ fontWeight: 600, fontSize: "clamp(32px,4.2vw,54px)", lineHeight: 1.02, letterSpacing: "-.035em", maxWidth: 760, marginBottom: 56 }}>
+          Им уже{" "}
+          <em style={{ fontFamily: "'Cormorant',serif", fontStyle: "italic", fontWeight: 500, color: ACCENT }}>не нужно</em>
+          {" "}думать о настройках
+        </h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }} className="cards-3t">
+          {testimonials.map((t) => (
+            <div key={t.name} style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 18, padding: "30px 28px", display: "flex", flexDirection: "column" }}>
+              <div style={{ color: ACCENT, fontSize: 15, marginBottom: 20 }}>★★★★★</div>
+              <p style={{ fontSize: 16, lineHeight: 1.6, color: "#3B382F", marginBottom: 26, flex: 1 }}>{t.quote}</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ width: 40, height: 40, borderRadius: "50%", background: "#14130F", color: "#EEEBE3", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 16 }}>{t.ini}</span>
+                <div>
+                  <div style={{ fontSize: 14.5, fontWeight: 600 }}>{t.name}</div>
+                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#8A857B" }}>{t.handle}</div>
+                </div>
               </div>
             </div>
           ))}
         </div>
+        <style>{`
+          @media (max-width: 720px) { .cards-3t { grid-template-columns: 1fr !important; } }
+        `}</style>
       </div>
-    </footer>
-  );
-}
-
-function footerHref(label: string) {
-  const hrefs: Record<string, string> = {
-    Возможности: "#features",
-    Режимы: "#modes",
-    Тарифы: "#pricing",
-    Инструкция: "#how-it-works",
-    "Личный кабинет": "/cabinet",
-    Telegram: "https://t.me/arvexo_support",
-    FAQ: "#support"
-  };
-
-  return hrefs[label] || "#top";
-}
-
-function InfoCard({
-  icon: Icon,
-  title,
-  text,
-  compact = false
-}: {
-  icon: typeof Shield;
-  title: string;
-  text: string;
-  compact?: boolean;
-}) {
-  return (
-    <motion.article
-      variants={fadeUp}
-      className="group rounded-2xl border border-white/[0.08] bg-[#101010] p-6 transition hover:-translate-y-1 hover:border-[#ef233c]/35 hover:shadow-[0_0_48px_rgba(239,35,60,0.09)]"
-    >
-      <span className="grid h-11 w-11 place-items-center rounded-lg bg-[#ef233c]/12 text-[#ff2b3a] transition group-hover:bg-[#ef233c]/18">
-        <Icon className="h-5 w-5" />
-      </span>
-      <h3 className={`text-white ${compact ? "mt-6 text-lg" : "mt-6 text-xl"} font-semibold`}>{title}</h3>
-      {text && <p className="mt-3 text-sm leading-7 text-[#a3a3a3]">{text}</p>}
-    </motion.article>
-  );
-}
-
-function Section({
-  children,
-  className = "",
-  id
-}: {
-  children: ReactNode;
-  className?: string;
-  id?: string;
-}) {
-  return (
-    <section id={id} className={`mx-auto w-[min(calc(100%-32px),1180px)] py-20 ${className}`}>
-      {children}
     </section>
   );
 }
 
-function SectionHeader({
-  kicker,
-  title,
-  text,
-  align = "center"
-}: {
-  kicker: string;
-  title: string;
-  text?: string;
-  align?: "left" | "center";
-}) {
+/* ─── Pricing ────────────────────────────────────────────────────── */
+
+function PricingSection() {
+  const pricingJsonLd = {
+    "@context": "https://schema.org",
+    "@graph": pricing.map((plan) => ({
+      "@type": "Product",
+      name: `Arvexo Connect ${plan.name}`,
+      description: plan.note,
+      brand: { "@type": "Brand", name: "Arvexo Connect" },
+      offers: {
+        "@type": "Offer",
+        price: plan.price.replace(/[^\d]/g, ""),
+        priceCurrency: "RUB",
+        url: "https://connect.arvexo.ru/cabinet/plans",
+        availability: "https://schema.org/InStock",
+      },
+    })),
+  };
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      className={align === "center" ? "mx-auto max-w-3xl text-center" : "max-w-2xl text-left"}
-    >
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ff2b3a]">{kicker}</p>
-      <h2 className="mt-4 text-balance text-[clamp(2rem,4vw,4.25rem)] font-semibold leading-tight tracking-[0] text-white">
-        {title}
-      </h2>
-      {text && <p className="mt-5 text-base leading-8 text-[#a3a3a3]">{text}</p>}
-    </motion.div>
+    <section id="price" style={{ maxWidth: 1280, margin: "0 auto", padding: "120px 36px" }}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pricingJsonLd) }} />
+      <div style={{ textAlign: "center", marginBottom: 64 }}>
+        <MonoLabel>(07) ТАРИФЫ</MonoLabel>
+        <h2 style={{ fontWeight: 600, fontSize: "clamp(32px,4.2vw,54px)", lineHeight: 1.02, letterSpacing: "-.035em" }}>
+          Простой доступ без лишней сложности
+        </h2>
+        <p style={{ fontSize: 18, color: "#57534B", maxWidth: 560, margin: "18px auto 0" }}>
+          Мы делаем стабильный приватный доступ, умную маршрутизацию и понятное подключение.
+        </p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, maxWidth: 1040, margin: "0 auto" }} className="cards-3p">
+        {pricing.map((p) => <PricingCard key={p.name} plan={p} />)}
+      </div>
+      {/* Guarantees */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, maxWidth: 1040, margin: "24px auto 0" }} className="cards-3g">
+        {guarantees.map((g) => (
+          <div key={g.title} style={{ display: "flex", alignItems: "flex-start", gap: 13, padding: "22px 24px", background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 14 }}>
+            <ShieldIcon />
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-.01em", marginBottom: 4 }}>{g.title}</div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.5, color: "#8A857B" }}>{g.body}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <style>{`
+        @media (max-width: 720px) {
+          .cards-3p, .cards-3g { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+    </section>
   );
 }
 
-function FlowNode({
-  icon: Icon,
-  title,
-  text,
-  accent = false,
-  small = false
-}: {
-  icon: typeof Shield;
-  title: string;
-  text: string;
-  accent?: boolean;
-  small?: boolean;
-}) {
+function PricingCard({ plan }: { plan: typeof pricing[0] }) {
   return (
-    <div
-      className={`rounded-2xl border p-5 text-center ${
-        accent ? "border-[#ef233c]/40 bg-[#ef233c]/10" : "border-white/[0.08] bg-white/[0.035]"
-      } ${small ? "min-h-[150px]" : ""}`}
-    >
-      <span className="mx-auto grid h-11 w-11 place-items-center rounded-lg bg-black/30 text-[#ff2b3a]">
-        <Icon className="h-5 w-5" />
-      </span>
-      <h3 className="mt-4 text-base font-semibold text-white">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-[#a3a3a3]">{text}</p>
+    <div style={{
+      background: plan.featured ? "#14130F" : "#FBFAF7",
+      color: plan.featured ? "#EEEBE3" : "#14130F",
+      border: `1px solid ${plan.featured ? "#14130F" : "rgba(20,19,15,.1)"}`,
+      borderRadius: 20, padding: "34px 30px", position: "relative",
+    }}>
+      {plan.featured && (
+        <span style={{ position: "absolute", top: 24, right: 26, fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".1em", color: "#14130F", background: ACCENT, padding: "4px 9px", borderRadius: 100 }}>POPULAR</span>
+      )}
+      <div style={{ fontWeight: 600, fontSize: 18, marginBottom: 5 }}>{plan.name}</div>
+      <div style={{ fontSize: 13, color: plan.featured ? "#9A958A" : "#8A857B", marginBottom: 26, minHeight: 36 }}>{plan.note}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 28 }}>
+        <span style={{ fontWeight: 700, fontSize: 46, letterSpacing: "-.04em" }}>{plan.price}</span>
+        <span style={{ fontSize: 14, color: plan.featured ? "#9A958A" : "#8A857B" }}>/месяц</span>
+      </div>
+      <a href="/cabinet/plans" style={{
+        display: "block", textAlign: "center", fontSize: 14.5, fontWeight: 600, padding: 14, borderRadius: 100, marginBottom: 28,
+        background: plan.featured ? ACCENT : "#EEEBE3",
+        color: plan.featured ? "#fff" : "#14130F",
+        border: plan.featured ? undefined : "1px solid rgba(20,19,15,.14)",
+      }}>
+        {plan.cta}
+      </a>
+      <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+        {plan.perks.map((perk) => (
+          <div key={perk} style={{ display: "flex", alignItems: "center", gap: 11, fontSize: 14.5 }}>
+            <CheckIcon color={ACCENT} />
+            {perk}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function FlowLine() {
-  return <div className="mx-auto h-8 w-px bg-gradient-to-b from-transparent via-[#ef233c]/55 to-transparent" />;
+/* ─── FAQ (dark) ─────────────────────────────────────────────────── */
+
+function FaqSection() {
+  const [open, setOpen] = useState(0);
+  return (
+    <section id="faq" style={{ background: "#14130F", color: "#EEEBE3" }}>
+      <div style={{ maxWidth: 880, margin: "0 auto", padding: "120px 36px" }}>
+        <div style={{ textAlign: "center", marginBottom: 56 }}>
+          <MonoLabel dark>(08) FAQ</MonoLabel>
+          <h2 style={{ fontWeight: 600, fontSize: "clamp(30px,4vw,50px)", lineHeight: 1.02, letterSpacing: "-.035em" }}>Частые вопросы</h2>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {faqData.map((f, i) => (
+            <FaqItem key={i} faq={f} isOpen={open === i} onToggle={() => setOpen(open === i ? -1 : i)} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 }
 
-function getApiBase() {
-  if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) return "http://127.0.0.1:8012";
-  return "https://api.arvexo.ru";
+function FaqItem({ faq, isOpen, onToggle }: { faq: typeof faqData[0]; isOpen: boolean; onToggle: () => void }) {
+  return (
+    <div style={{ background: "#1A1814", border: "1px solid rgba(255,255,255,.08)", borderRadius: 14, overflow: "hidden" }}>
+      <button
+        onClick={onToggle}
+        style={{ width: "100%", background: "none", border: "none", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, padding: "20px 24px", cursor: "pointer", color: "#EEEBE3", textAlign: "left" }}
+      >
+        <span style={{ fontWeight: 600, fontSize: 17, letterSpacing: "-.01em" }}>{faq.q}</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transition: "transform .25s ease", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+          <path d="M6 9l6 6 6-6" stroke={ACCENT} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {isOpen && (
+        <p style={{ padding: "0 24px 22px", fontSize: 15, lineHeight: 1.6, color: "#9A958A", maxWidth: 680 }}>{faq.a}</p>
+      )}
+    </div>
+  );
+}
+
+/* ─── Big CTA ────────────────────────────────────────────────────── */
+
+function BigCta() {
+  return (
+    <section style={{ maxWidth: 1280, margin: "0 auto", padding: "130px 36px 110px", textAlign: "center" }}>
+      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, letterSpacing: ".16em", color: "#8A857B", marginBottom: 28 }}>ARVEXO CONNECT</div>
+      <h2 style={{ fontWeight: 700, fontSize: "clamp(36px,5.8vw,74px)", lineHeight: .96, letterSpacing: "-.045em", marginBottom: 24, maxWidth: 900, marginLeft: "auto", marginRight: "auto" }}>
+        Подключение, которое работает{" "}
+        <em style={{ fontFamily: "'Cormorant',serif", fontStyle: "italic", fontWeight: 600, color: ACCENT }}>под ваш</em>
+        {" "}сценарий
+      </h2>
+      <p style={{ fontSize: 18, color: "#4A463F", maxWidth: 560, margin: "0 auto 38px" }}>
+        Smart Russia для повседневного интернета. Privacy для максимального туннеля. Global для поездок и сложных сетей.
+      </p>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, flexWrap: "wrap" }}>
+        <CtaPrimaryBtn />
+        <a href="https://t.me/arvexo_support"
+          style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#FBFAF7", color: "#14130F", fontSize: 16, fontWeight: 600, padding: "17px 28px", borderRadius: 100, border: "1px solid rgba(20,19,15,.14)" }}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(20,19,15,.35)")}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(20,19,15,.14)")}>
+          Написать в поддержку
+        </a>
+      </div>
+    </section>
+  );
+}
+
+function CtaPrimaryBtn() {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <a href="/cabinet"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ display: "inline-flex", alignItems: "center", gap: 10, background: hovered ? ACCENT : "#14130F", color: "#EEEBE3", fontSize: 16, fontWeight: 600, padding: "17px 32px", borderRadius: 100, transition: "background .2s" }}>
+      Получить Arvexo Connect <ArrowRight size={17} />
+    </a>
+  );
+}
+
+/* ─── Footer ─────────────────────────────────────────────────────── */
+
+function LandingFooter() {
+  const columns = [
+    { title: "PRODUCT",  links: [{ label: "Возможности", href: "#feat" }, { label: "Режимы", href: "#modes" }, { label: "Тарифы", href: "#price" }, { label: "Инструкция", href: "/instructions/iphone" }, { label: "Личный кабинет", href: "/cabinet" }] },
+    { title: "COMPANY",  links: [{ label: "Arvexo", href: "#top" }, { label: "Контакты", href: "https://t.me/arvexo_support" }, { label: "Статус серверов", href: "#top" }] },
+    { title: "SUPPORT",  links: [{ label: "Telegram", href: "https://t.me/arvexo_support" }, { label: "FAQ", href: "#faq" }, { label: "iPhone", href: "/instructions/iphone" }, { label: "Android", href: "/instructions/android" }, { label: "Windows", href: "/instructions/windows" }] },
+    { title: "LEGAL",    links: [{ label: "Политика конфиденциальности", href: "/privacy" }, { label: "Условия использования", href: "/terms" }] },
+  ];
+  return (
+    <footer style={{ borderTop: "1px solid rgba(20,19,15,.1)" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "56px 36px 40px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1.2fr", gap: 30, marginBottom: 56 }} className="footer-grid">
+          <div style={{ maxWidth: 300 }}>
+            <div style={{ fontWeight: 700, fontSize: 20, letterSpacing: "-.02em", display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
+              <span style={{ width: 9, height: 9, borderRadius: "50%", background: ACCENT, display: "inline-block" }} />
+              Arvexo Connect
+            </div>
+            <p style={{ fontSize: 14, color: "#8A857B", lineHeight: 1.5 }}>VPN-доступ с режимами Smart Russia, Privacy и Global. Одна подписка, несколько узлов и понятное подключение.</p>
+          </div>
+          {columns.map((col) => (
+            <div key={col.title} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: ".12em", color: "#A39E93", marginBottom: 4 }}>{col.title}</div>
+              {col.links.map((l) => (
+                <a key={l.label} href={l.href} style={{ fontSize: 14.5, color: "#4A463F", fontWeight: 500 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = ACCENT)}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#4A463F")}>
+                  {l.label}
+                </a>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14, paddingTop: 24, borderTop: "1px solid rgba(20,19,15,.1)" }}>
+          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#A39E93" }}>© 2026 Arvexo</span>
+          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#A39E93" }}>connect.arvexo.ru</span>
+        </div>
+      </div>
+      <style>{`
+        @media (max-width: 900px) { .footer-grid { grid-template-columns: 1fr 1fr !important; } }
+        @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr !important; } }
+      `}</style>
+    </footer>
+  );
 }

@@ -4,6 +4,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
+const ACCENT = "#E5402C";
+
 type Order = {
   id: string;
   status: string;
@@ -60,10 +62,7 @@ export function CheckoutApp() {
 
   async function loadOrders() {
     const jwt = localStorage.getItem(JWT_STORAGE_KEY);
-    if (!jwt) {
-      window.location.assign("/cabinet/login");
-      return;
-    }
+    if (!jwt) { window.location.assign("/cabinet/login"); return; }
     const response = await fetch(`${getApiBase()}/api/cabinet/orders`, { headers: { Authorization: `Bearer ${jwt}` } });
     if (response.status === 401 || response.status === 403) {
       localStorage.removeItem(JWT_STORAGE_KEY);
@@ -84,14 +83,12 @@ export function CheckoutApp() {
     if (!order) return;
     const jwt = localStorage.getItem(JWT_STORAGE_KEY);
     if (!jwt) return;
-    setLoading(true);
-    setError("");
-    setMessage("");
+    setLoading(true); setError(""); setMessage("");
     try {
       const response = await fetch(`${getApiBase()}/api/cabinet/orders/${order.id}/payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
-        body: JSON.stringify({ payment_reference: paymentReference.trim() })
+        body: JSON.stringify({ payment_reference: paymentReference.trim() }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
@@ -107,49 +104,87 @@ export function CheckoutApp() {
   }
 
   return (
-    <main className="min-h-screen bg-[#050505] text-white">
-      <section className="mx-auto w-[min(calc(100%-32px),980px)] py-10">
-        <div className="flex items-center justify-between border-b border-white/[0.08] pb-6">
-          <Link href="/cabinet/plans" className="text-sm font-semibold text-white/60 hover:text-white">Тарифы</Link>
-          <span className="text-xs font-bold uppercase text-[#ff2b3a]">Checkout</span>
+    <div style={{ background: "#EEEBE3", color: "#14130F", minHeight: "100vh", fontFamily: "'Onest',sans-serif", WebkitFontSmoothing: "antialiased" }}>
+      {/* Nav */}
+      <header style={{ borderBottom: "1px solid rgba(20,19,15,.08)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "18px 36px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Link href="/" style={{ fontWeight: 700, fontSize: 19, letterSpacing: "-.02em", display: "flex", alignItems: "center", gap: 9, color: "#14130F" }}>
+            <span style={{ width: 9, height: 9, borderRadius: "50%", background: ACCENT, display: "inline-block" }} />
+            Arvexo Connect
+          </Link>
+          <Link href="/cabinet/plans" style={{ color: "#57534B", fontSize: 14, fontWeight: 500 }}>← Тарифы</Link>
         </div>
+      </header>
+
+      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 36px 80px" }}>
+        {/* Mono label */}
+        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, letterSpacing: ".16em", color: "#8A857B", marginBottom: 28 }}>
+          ОПЛАТА
+        </div>
+
         {!order ? (
-          <div className="mt-10 rounded-lg border border-white/[0.1] bg-[#101010] p-6">
-            <p className="text-white/60">Заказов пока нет.</p>
+          <div style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.1)", borderRadius: 16, padding: 32 }}>
+            <p style={{ color: "#57534B" }}>Заказов пока нет.</p>
+            <Link href="/cabinet/plans" style={{ display: "inline-flex", marginTop: 16, padding: "11px 24px", borderRadius: 100, background: "#14130F", color: "#EEEBE3", fontSize: 14, fontWeight: 600 }}>
+              Выбрать тариф
+            </Link>
           </div>
         ) : (
-          <div className="mt-10 rounded-lg border border-white/[0.1] bg-[#101010] p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div style={{ display: "grid", gap: 16 }}>
+            {/* Header card */}
+            <div style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.1)", borderRadius: 18, padding: "28px 30px", display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start", justifyContent: "space-between" }}>
               <div>
-                <p className="text-xs font-bold uppercase text-[#ff2b3a]">
-                  {isSbp ? "Оплата через СБП" : isTon ? "Оплата TON" : `Оплата USDT ${order.crypto_network || ""}`}
-                </p>
-                <h1 className="mt-3 text-3xl font-bold">{order.plan_name || "Order"}</h1>
-                <p className="mt-2 break-all text-sm text-white/45">Order ID: {order.id}</p>
+                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: ".12em", color: ACCENT, marginBottom: 10 }}>
+                  {isSbp ? "ОПЛАТА ЧЕРЕЗ СБП" : isTon ? "ОПЛАТА TON" : `ОПЛАТА USDT ${order.crypto_network || ""}`}
+                </div>
+                <h1 style={{ fontWeight: 700, fontSize: 28, letterSpacing: "-.03em", marginBottom: 6 }}>{order.plan_name || "Order"}</h1>
+                <p style={{ fontSize: 13, color: "#8A857B", fontFamily: "'JetBrains Mono',monospace" }}>Order ID: {order.id}</p>
               </div>
               <StatusBadge status={order.status} />
             </div>
 
+            {/* Success notice */}
             {isPaid && order.subscription_token && (
               <Notice tone="success">
-                Платеж подтвержден. Доступ активирован.
-                <Link href={`/cabinet/subscription/${order.subscription_token}`} className="ml-2 font-bold text-white underline">Открыть подписку</Link>
+                Платеж подтвержден. Доступ активирован.{" "}
+                <Link href={`/cabinet/subscription/${order.subscription_token}`} style={{ fontWeight: 700, color: "#145A35", textDecoration: "underline", marginLeft: 4 }}>
+                  Открыть подписку
+                </Link>
               </Notice>
             )}
             {isWaiting && <Notice>Платеж уже отправлен на проверку. Можно обновить ID/комментарий, если ошиблись.</Notice>}
             {!isPaid && (
               <Notice tone="warning">
-                Переводите ровно сумму из блока «К оплате». Комиссию банка или сети оплачивайте сверху, чтобы нам дошла полная сумма. {requiresTransferMessage ? "В сообщении/комментарии к переводу обязательно укажите текст из блока «Сообщение к переводу»." : "После USDT-перевода обязательно вставьте tx hash ниже."} Один перевод — один order.
+                Переводите ровно сумму из блока «К оплате». Комиссию банка или сети оплачивайте сверху.{" "}
+                {requiresTransferMessage
+                  ? "В сообщении/комментарии к переводу обязательно укажите текст из блока «Сообщение к переводу»."
+                  : "После USDT-перевода обязательно вставьте tx hash ниже."}{" "}
+                Один перевод — один order.
               </Notice>
             )}
 
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {/* Info grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 }} className="checkout-grid">
               <Info label="Цена тарифа" value={basePriceText} />
-              <CopyInfo label="К оплате" value={amountText} onCopy={() => copy(amountText, "amount")} />
-              <CopyInfo label={requiresTransferMessage ? "Сообщение к переводу" : "Order reference"} value={purposeText} onCopy={() => copy(purposeText, "purpose")} highlight={requiresTransferMessage} />
+              <CopyInfo label="К оплате" value={amountText} onCopy={() => copy(amountText, "amount")} copiedLabel="amount" copied={copied} />
+              <CopyInfo
+                label={requiresTransferMessage ? "Сообщение к переводу" : "Order reference"}
+                value={purposeText}
+                onCopy={() => copy(purposeText, "purpose")}
+                copiedLabel="purpose"
+                copied={copied}
+                highlight={requiresTransferMessage}
+              />
               {isSbp ? (
                 <>
-                  <CopyInfo label="Получатель" value={order.payment_recipient || "SBP_PAYMENT_RECIPIENT не задан"} onCopy={() => copy(order.payment_recipient || "", "recipient")} disabled={!order.payment_recipient} />
+                  <CopyInfo
+                    label="Получатель"
+                    value={order.payment_recipient || "SBP_PAYMENT_RECIPIENT не задан"}
+                    onCopy={() => copy(order.payment_recipient || "", "recipient")}
+                    copiedLabel="recipient"
+                    copied={copied}
+                    disabled={!order.payment_recipient}
+                  />
                   {order.payment_url ? <PaymentLink href={order.payment_url} /> : <Info label="Ссылка оплаты" value="Не настроена" />}
                 </>
               ) : (
@@ -159,85 +194,148 @@ export function CheckoutApp() {
                     label="Адрес кошелька"
                     value={order.crypto_address || (isTon ? "TON_PAYMENT_ADDRESS не задан" : "CRYPTO_PAYMENT_ADDRESS не задан")}
                     onCopy={() => copy(order.crypto_address || "", "address")}
+                    copiedLabel="address"
+                    copied={copied}
                     disabled={!order.crypto_address}
                   />
                 </>
               )}
             </div>
 
+            {/* QR section */}
             {isSbp && (order.qr_image_base64 || order.qr_payload) && (
-              <div className="mt-6 grid gap-4 md:grid-cols-[240px_1fr] md:items-start">
-                <img
-                  alt="Payment QR"
-                  className="w-60 rounded-lg bg-white p-3"
-                  src={order.qr_image_base64 ? `data:image/png;base64,${order.qr_image_base64}` : `https://api.qrserver.com/v1/create-qr-code/?size=420x420&data=${encodeURIComponent(order.qr_payload || "")}`}
-                />
-                <div className="rounded-lg border border-white/[0.08] bg-black/25 p-4">
-                  <p className="text-xs text-white/45">QR payload</p>
-                  <p className="mt-2 break-all text-sm font-semibold">{order.qr_payload}</p>
+              <div style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 16, padding: 24, display: "grid", gridTemplateColumns: "auto 1fr", gap: 24, alignItems: "start" }} className="qr-grid">
+                {order.qr_image_base64 && (
+                  <img alt="Payment QR" src={`data:image/png;base64,${order.qr_image_base64}`}
+                    style={{ width: 200, borderRadius: 12, background: "#fff", padding: 10 }} />
+                )}
+                <div>
+                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, letterSpacing: ".1em", color: "#8A857B", marginBottom: 8 }}>QR PAYLOAD</div>
+                  <p style={{ fontSize: 13, wordBreak: "break-all", lineHeight: 1.6, color: "#3B382F", marginBottom: 16 }}>{order.qr_payload}</p>
                   {order.qr_payload && (
-                    <button onClick={() => copy(order.qr_payload || "", "qr")} className="mt-4 min-h-10 rounded-lg border border-white/[0.12] px-4 text-sm font-bold">
-                      Скопировать QR payload
+                    <button onClick={() => copy(order.qr_payload || "", "qr")}
+                      style={{ padding: "10px 20px", borderRadius: 100, border: "1px solid rgba(20,19,15,.14)", background: "transparent", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Onest',sans-serif" }}>
+                      {copied === "qr" ? "Скопировано" : "Скопировать QR payload"}
                     </button>
                   )}
                 </div>
               </div>
             )}
 
+            {/* Payment confirmation */}
             {!isPaid && (
-              <div className="mt-6 grid gap-3">
-                <label className="grid gap-2 text-sm font-semibold text-white/56">
+              <div style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 16, padding: "24px 28px" }}>
+                <label style={{ display: "grid", gap: 8, fontSize: 13, fontWeight: 600, color: "#57534B" }}>
                   {isSbp ? "ID перевода или комментарий из банка" : isTon ? "Tx hash или комментарий TON-перевода" : "Tx hash"}
                   <input
                     value={paymentReference}
-                    onChange={(event) => setPaymentReference(event.target.value)}
+                    onChange={(e) => setPaymentReference(e.target.value)}
                     placeholder={isSbp ? purposeText : isTon ? purposeText : "Например: 5f8c..."}
-                    className="h-12 rounded-lg border border-white/[0.1] bg-black px-4 text-white outline-none focus:border-[#ef233c]"
+                    style={{ height: 48, borderRadius: 12, border: "1px solid rgba(20,19,15,.14)", padding: "0 16px", fontSize: 14, color: "#14130F", fontFamily: "'Onest',sans-serif", outline: "none", background: "#EEEBE3" }}
                   />
                 </label>
-                <button disabled={loading || !canSubmit} onClick={submitPayment} className="min-h-12 rounded-lg bg-[#ef233c] px-5 text-sm font-bold disabled:opacity-50">
-                  {loading ? "Отправляем..." : isWaiting ? "Обновить данные платежа" : "Я оплатил"}
+                <button
+                  disabled={loading || !canSubmit}
+                  onClick={submitPayment}
+                  style={{ marginTop: 12, padding: "14px 28px", borderRadius: 100, background: ACCENT, color: "#fff", fontSize: 15, fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "'Onest',sans-serif", opacity: (loading || !canSubmit) ? .5 : 1 }}
+                >
+                  {loading ? "Отправляем…" : isWaiting ? "Обновить данные платежа" : "Я оплатил"}
                 </button>
               </div>
             )}
 
-            <div className="mt-5 flex flex-wrap gap-3 text-sm">
-              <Link href="/cabinet/orders" className="font-bold text-white/64 hover:text-white">История заказов</Link>
-              <Link href="/cabinet/support" className="font-bold text-white/64 hover:text-white">Проблема с оплатой</Link>
-              {copied && <span className="text-white/45">Скопировано</span>}
+            {/* Footer links */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center", padding: "4px 0" }}>
+              <Link href="/cabinet/orders" style={{ fontSize: 14, fontWeight: 600, color: "#57534B" }}>История заказов</Link>
+              <Link href="/cabinet/support" style={{ fontSize: 14, fontWeight: 600, color: "#57534B" }}>Проблема с оплатой</Link>
+              {copied && <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#1FB46A" }}>Скопировано</span>}
             </div>
-            {message && <p className="mt-4 text-sm text-white/64">{message}</p>}
-            {error && <p className="mt-4 text-sm text-[#ff2b3a]">{error}</p>}
+
+            {message && (
+              <div style={{ padding: "14px 18px", borderRadius: 12, background: "rgba(31,180,106,.08)", border: "1px solid rgba(31,180,106,.2)", fontSize: 14, color: "#145A35" }}>
+                {message}
+              </div>
+            )}
+            {error && (
+              <div style={{ padding: "14px 18px", borderRadius: 12, background: "rgba(229,64,44,.07)", border: "1px solid rgba(229,64,44,.2)", fontSize: 14, color: ACCENT }}>
+                {error}
+              </div>
+            )}
           </div>
         )}
-      </section>
-    </main>
-  );
-}
+      </main>
 
-function StatusBadge({ status }: { status: string }) {
-  const label: Record<string, string> = {
-    pending: "Ожидает оплаты",
-    waiting_confirmation: "На проверке",
-    paid: "Оплачен",
-    cancelled: "Отменен"
-  };
-  return (
-    <div className="rounded-lg border border-white/[0.1] bg-black/25 px-4 py-3">
-      <p className="text-xs text-white/45">Статус</p>
-      <p className="mt-1 text-sm font-bold">{label[status] || status}</p>
+      <footer style={{ borderTop: "1px solid rgba(20,19,15,.08)", marginTop: 40 }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 36px", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#A39E93" }}>© 2026 Arvexo</span>
+          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#A39E93" }}>connect.arvexo.ru</span>
+        </div>
+      </footer>
+
+      <style>{`
+        @media (max-width: 640px) { .checkout-grid { grid-template-columns: 1fr !important; } .qr-grid { grid-template-columns: 1fr !important; } }
+      `}</style>
     </div>
   );
 }
 
-function CopyInfo({ label, value, disabled, highlight, onCopy }: { label: string; value: string; disabled?: boolean; highlight?: boolean; onCopy: () => void }) {
+function StatusBadge({ status }: { status: string }) {
+  const labels: Record<string, string> = {
+    pending: "Ожидает оплаты",
+    waiting_confirmation: "На проверке",
+    paid: "Оплачен",
+    cancelled: "Отменен",
+  };
+  const colors: Record<string, { bg: string; color: string; border: string }> = {
+    paid: { bg: "rgba(31,180,106,.08)", color: "#145A35", border: "rgba(31,180,106,.2)" },
+    waiting_confirmation: { bg: "rgba(229,64,44,.06)", color: ACCENT, border: "rgba(229,64,44,.2)" },
+    pending: { bg: "rgba(20,19,15,.04)", color: "#57534B", border: "rgba(20,19,15,.1)" },
+    cancelled: { bg: "rgba(20,19,15,.04)", color: "#8A857B", border: "rgba(20,19,15,.1)" },
+  };
+  const c = colors[status] || colors.pending;
   return (
-    <div className={`rounded-lg border p-4 ${highlight ? "border-amber-300/35 bg-amber-300/10" : "border-white/[0.08] bg-black/25"}`}>
-      <p className={`text-xs ${highlight ? "font-bold uppercase text-amber-100" : "text-white/45"}`}>{label}</p>
-      <p className="mt-2 break-words text-sm font-semibold">{value}</p>
-      {highlight && <p className="mt-2 text-xs leading-5 text-amber-50/72">Этот текст нужно вставить в комментарий или сообщение к переводу без изменений.</p>}
-      <button disabled={disabled} onClick={onCopy} className="mt-4 min-h-9 rounded-lg border border-white/[0.12] px-3 text-xs font-bold disabled:opacity-40">
-        Скопировать
+    <div style={{ padding: "10px 18px", borderRadius: 100, background: c.bg, border: `1px solid ${c.border}` }}>
+      <p style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", letterSpacing: ".06em", color: "#8A857B", marginBottom: 2 }}>СТАТУС</p>
+      <p style={{ fontSize: 14, fontWeight: 700, color: c.color }}>{labels[status] || status}</p>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 14, padding: "18px 20px" }}>
+      <p style={{ fontSize: 11.5, fontFamily: "'JetBrains Mono',monospace", letterSpacing: ".1em", color: "#8A857B", marginBottom: 8 }}>{label.toUpperCase()}</p>
+      <p style={{ fontSize: 15, fontWeight: 600, wordBreak: "break-all" }}>{value}</p>
+    </div>
+  );
+}
+
+function CopyInfo({ label, value, disabled, highlight, onCopy, copiedLabel, copied }: {
+  label: string; value: string; disabled?: boolean; highlight?: boolean;
+  onCopy: () => void; copiedLabel: string; copied: string;
+}) {
+  const isCopied = copied === copiedLabel;
+  return (
+    <div style={{
+      background: highlight ? "rgba(229,64,44,.04)" : "#FBFAF7",
+      border: `1px solid ${highlight ? "rgba(229,64,44,.2)" : "rgba(20,19,15,.09)"}`,
+      borderRadius: 14, padding: "18px 20px",
+    }}>
+      <p style={{ fontSize: 11.5, fontFamily: "'JetBrains Mono',monospace", letterSpacing: ".1em", color: highlight ? ACCENT : "#8A857B", marginBottom: 8 }}>
+        {label.toUpperCase()}
+      </p>
+      <p style={{ fontSize: 14, fontWeight: 600, wordBreak: "break-all", lineHeight: 1.55 }}>{value}</p>
+      {highlight && (
+        <p style={{ fontSize: 12.5, color: "#57534B", marginTop: 6, lineHeight: 1.55 }}>
+          Этот текст нужно вставить в комментарий или сообщение к переводу без изменений.
+        </p>
+      )}
+      <button
+        disabled={disabled}
+        onClick={onCopy}
+        style={{ marginTop: 12, padding: "8px 18px", borderRadius: 100, border: "1px solid rgba(20,19,15,.14)", background: "transparent", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Onest',sans-serif", opacity: disabled ? .4 : 1, color: isCopied ? "#1FB46A" : "#14130F" }}
+      >
+        {isCopied ? "Скопировано" : "Скопировать"}
       </button>
     </div>
   );
@@ -245,33 +343,25 @@ function CopyInfo({ label, value, disabled, highlight, onCopy }: { label: string
 
 function PaymentLink({ href }: { href: string }) {
   return (
-    <div className="rounded-lg border border-white/[0.08] bg-black/25 p-4">
-      <p className="text-xs text-white/45">Ссылка оплаты</p>
-      <a href={href} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-10 items-center rounded-lg bg-[#ef233c] px-4 text-sm font-bold">
+    <div style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 14, padding: "18px 20px" }}>
+      <p style={{ fontSize: 11.5, fontFamily: "'JetBrains Mono',monospace", letterSpacing: ".1em", color: "#8A857B", marginBottom: 12 }}>ССЫЛКА ОПЛАТЫ</p>
+      <a href={href} target="_blank" rel="noreferrer"
+        style={{ display: "inline-flex", alignItems: "center", padding: "12px 22px", borderRadius: 100, background: ACCENT, color: "#fff", fontSize: 14, fontWeight: 600 }}>
         Открыть оплату
       </a>
     </div>
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-white/[0.08] bg-black/25 p-4">
-      <p className="text-xs text-white/45">{label}</p>
-      <p className="mt-2 break-words text-sm font-semibold">{value}</p>
-    </div>
-  );
-}
-
 function Notice({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "success" | "warning" }) {
-  const className =
-    tone === "success"
-      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-50"
-      : tone === "warning"
-        ? "border-amber-300/30 bg-amber-300/10 text-amber-50"
-        : "border-white/[0.1] bg-black/25 text-white/64";
+  const styles: Record<string, { bg: string; border: string; color: string }> = {
+    success: { bg: "rgba(31,180,106,.07)", border: "rgba(31,180,106,.2)", color: "#145A35" },
+    warning: { bg: "rgba(229,64,44,.05)", border: "rgba(229,64,44,.18)", color: "#8B2A1C" },
+    default: { bg: "rgba(20,19,15,.04)", border: "rgba(20,19,15,.1)", color: "#57534B" },
+  };
+  const s = styles[tone];
   return (
-    <div className={`mt-6 rounded-lg border p-4 text-sm ${className}`}>
+    <div style={{ padding: "14px 18px", borderRadius: 14, background: s.bg, border: `1px solid ${s.border}`, fontSize: 14, color: s.color, lineHeight: 1.6 }}>
       {children}
     </div>
   );

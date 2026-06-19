@@ -1,3 +1,4 @@
+import secrets
 from datetime import timedelta
 from decimal import Decimal
 from uuid import UUID
@@ -14,6 +15,7 @@ from app.models.plan import Plan
 from app.models.user import User
 from app.schemas.billing import CustomPlanConfig, OrderOut
 from app.services.audit_service import write_audit_log
+from app.utils.qr import qr_data_uri
 from app.utils.time import utc_now
 
 
@@ -24,6 +26,14 @@ UNPAID_ORDER_STATUSES = {
     OrderStatus.WAITING_CONFIRMATION.value,
 }
 UNPAID_ORDER_RETENTION_DAYS = 14
+
+# Соль на сумму TRC20-платежа: без неё два заказа на один тариф получают одинаковый
+# crypto_amount (он считается детерминированно из цены/курса), и TRC20-монитор не может
+# различить, какой заказ реально оплачен (CRITICAL, см. SECURITY_REVIEW.md, п.1).
+CRYPTO_AMOUNT_SALT_MIN = Decimal("0.0001")
+CRYPTO_AMOUNT_SALT_MAX = Decimal("0.0099")
+CRYPTO_AMOUNT_SALT_STEP = Decimal("0.0001")
+CRYPTO_AMOUNT_SALT_UNIQUENESS_ATTEMPTS = 25
 
 
 def require_payment_configuration(payment_method: PaymentMethod) -> None:
@@ -114,6 +124,32 @@ def quote_custom_plan(config: CustomPlanConfig) -> Decimal:
     return (monthly * months * discount).quantize(Decimal("0.01"))
 
 
+def _random_crypto_salt() -> Decimal:
+    steps = int((CRYPTO_AMOUNT_SALT_MAX - CRYPTO_AMOUNT_SALT_MIN) / CRYPTO_AMOUNT_SALT_STEP) + 1
+    return CRYPTO_AMOUNT_SALT_MIN + CRYPTO_AMOUNT_SALT_STEP * secrets.randbelow(steps)
+
+
+async def _unique_salted_crypto_amount(session: AsyncSession, base_amount: Decimal, crypto_address: str) -> Decimal:
+    """Подбирает сумму к оплате, уникальную среди текущих неоплаченных TRC20-заказов на этот
+    адрес, чтобы матчинг по сумме в trc20_payment_monitor не путал чужие платежи между собой."""
+    candidate = base_amount
+    for _ in range(CRYPTO_AMOUNT_SALT_UNIQUENESS_ATTEMPTS):
+        candidate = (base_amount + _random_crypto_salt()).quantize(Decimal("0.000001"))
+        result = await session.execute(
+            select(Order.id).where(
+                Order.crypto_address == crypto_address,
+                Order.crypto_amount == candidate,
+                Order.status.in_(UNPAID_ORDER_STATUSES),
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            return candidate
+    # Десятки коллизий подряд практически невозможны; если это всё же произошло, отдаём
+    # последнего кандидата — блокировка строк в find_matching_order не даст выдать подписку
+    # дважды по одной транзакции, просто платёж придётся сопоставить вручную.
+    return candidate
+
+
 async def create_order_for_user(
     session: AsyncSession,
     user_id: UUID,
@@ -139,6 +175,8 @@ async def create_order_for_user(
         order_metadata = None
 
     payment_amount = calculate_payment_amount(amount, plan.currency, payment_method)
+    if payment_method == PaymentMethod.CRYPTO_MANUAL and settings.crypto_payment_address:
+        payment_amount = await _unique_salted_crypto_amount(session, payment_amount, settings.crypto_payment_address)
     order = Order(
         user_id=user_id,
         plan_id=plan.id,
@@ -260,7 +298,10 @@ def order_to_out(order: Order) -> OrderOut:
         provider_payment_id=order.provider_payment_id,
         payment_url=order.payment_url,
         qr_payload=order.qr_payload,
-        qr_image_base64=order.qr_image_base64,
+        # Если админ не загрузил готовую картинку QR (settings.sbp_qr_image_base64),
+        # раньше фронтенд сам тянул её с api.qrserver.com, передавая туда qr_payload —
+        # см. SECURITY_REVIEW.md, п.11. Теперь рисуем QR на сервере по требованию.
+        qr_image_base64=order.qr_image_base64 or (qr_data_uri(order.qr_payload) if order.qr_payload else None),
         payment_recipient=order.payment_recipient,
         crypto_network=order.crypto_network,
         crypto_address=order.crypto_address,

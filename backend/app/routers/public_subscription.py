@@ -12,6 +12,7 @@ from app.models.vpn_subscription import VpnSubscription
 from app.services.device_service import record_raw_subscription_device
 from app.services.subscription_proxy import build_subscription_headers, proxy_subscription
 from app.services.subscription_service import ensure_subscription_accessible, require_subscription_by_token
+from app.utils.qr import qr_data_uri
 from app.utils.rate_limit import enforce_rate_limit
 
 router = APIRouter(tags=["public-subscription"])
@@ -69,7 +70,7 @@ def render_subscription_html(subscription: VpnSubscription) -> str:
     telegram_url = settings.telegram_bot_url.rstrip("/")
     expires = subscription.expires_at.strftime("%d.%m.%Y") if subscription.expires_at else "без срока"
     days = "без срока" if subscription.expires_at is None else expires
-    qr_src = f"https://api.qrserver.com/v1/create-qr-code/?size=420x420&data={quote(raw_url, safe='')}"
+    qr_src = qr_data_uri(raw_url)
     devices = [device for device in subscription.devices if device.is_active]
     device_items = "".join(
         f"""<li><strong>{escape(device.name or "Устройство")}</strong><span>{escape(device.type or "other")}</span></li>"""

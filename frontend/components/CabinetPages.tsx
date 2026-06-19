@@ -4,6 +4,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 
+const ACCENT = "#E5402C";
+const SUCCESS = "#1FB46A";
 const JWT_STORAGE_KEY = "arvexo_cabinet_jwt";
 
 type Order = {
@@ -32,6 +34,7 @@ type Subscription = {
   plan_name: string | null;
   public_subscription_url: string;
   raw_subscription_url: string;
+  qr_image_base64: string | null;
 };
 
 type Device = {
@@ -46,45 +49,91 @@ type Device = {
 };
 
 const modes = [
-  { value: "smart", title: "Smart Russia", text: "Локальные сервисы напрямую, зарубежные через защищённый туннель." },
-  { value: "privacy", title: "Privacy", text: "Почти весь трафик идёт через защищённый туннель." },
-  { value: "global", title: "Global", text: "Для поездок и нестабильных сетей." },
+  { value: "smart",   title: "Smart Russia", text: "Локальные сервисы напрямую, зарубежные через защищённый туннель." },
+  { value: "privacy", title: "Privacy",       text: "Почти весь трафик идёт через защищённый туннель." },
+  { value: "global",  title: "Global",        text: "Для поездок и нестабильных сетей." },
 ];
 
 const repairSteps: Record<string, string[]> = {
-  telegram: ["Проверьте, выключен ли proxy внутри Telegram.", "Обновите подписку в VPN-приложении.", "Попробуйте режим Privacy.", "Если не помогло, напишите в поддержку."],
-  offline: ["Проверьте интернет без VPN.", "Обновите подписку.", "Выберите другой профиль.", "Проверьте срок подписки в кабинете."],
-  slow: ["Смените профиль в приложении.", "Попробуйте режим Smart Russia.", "Отключите лишние фоновые загрузки.", "Если скорость не восстановилась, напишите в поддержку."],
-  iphone: ["Используйте Happ или V2RayTun.", "Выберите Reality-профиль.", "Не используйте Hysteria как основной профиль.", "Обновите подписку."],
-  local: ["Включите Smart Russia.", "Обновите подписку.", "Перезапустите VPN-клиент.", "Если банк или маркетплейс не открылся, напишите в поддержку."],
-  import: ["Откройте raw subscription link.", "Скопируйте ссылку полностью.", "Добавьте подписку заново.", "Проверьте, что клиент поддерживает subscription import."],
-  unknown: ["Обновите подписку.", "Смените режим.", "Проверьте инструкцию для вашего устройства.", "Опишите проблему поддержке."],
+  telegram:  ["Проверьте, выключен ли proxy внутри Telegram.", "Обновите подписку в VPN-приложении.", "Попробуйте режим Privacy.", "Если не помогло, напишите в поддержку."],
+  offline:   ["Проверьте интернет без VPN.", "Обновите подписку.", "Выберите другой профиль.", "Проверьте срок подписки в кабинете."],
+  slow:      ["Смените профиль в приложении.", "Попробуйте режим Smart Russia.", "Отключите лишние фоновые загрузки.", "Если скорость не восстановилась, напишите в поддержку."],
+  iphone:    ["Используйте Happ или V2RayTun.", "Выберите Reality-профиль.", "Не используйте Hysteria как основной профиль.", "Обновите подписку."],
+  local:     ["Включите Smart Russia.", "Обновите подписку.", "Перезапустите VPN-клиент.", "Если банк или маркетплейс не открылся, напишите в поддержку."],
+  import:    ["Откройте raw subscription link.", "Скопируйте ссылку полностью.", "Добавьте подписку заново.", "Проверьте, что клиент поддерживает subscription import."],
+  unknown:   ["Обновите подписку.", "Смените режим.", "Проверьте инструкцию для вашего устройства.", "Опишите проблему поддержке."],
 };
 
-const repairLabels = [
+const repairLabels: [string, string][] = [
   ["telegram", "Telegram не работает"],
-  ["offline", "Всё не открывается"],
-  ["slow", "Медленно"],
-  ["iphone", "iPhone пишет “Соединение…”"],
-  ["local", "Ozon/банк не открывается"],
-  ["import", "Подписка не импортируется"],
-  ["unknown", "Не знаю, что выбрать"],
+  ["offline",  "Всё не открывается"],
+  ["slow",     "Медленно"],
+  ["iphone",   "iPhone пишет «Соединение…»"],
+  ["local",    "Ozon / банк не открывается"],
+  ["import",   "Подписка не импортируется"],
+  ["unknown",  "Не знаю, что выбрать"],
 ];
+
+/* ─── Shared shell ───────────────────────────────────────────────── */
+
+function CabinetShell({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div style={{ background: "#EEEBE3", color: "#14130F", minHeight: "100vh", fontFamily: "'Onest',sans-serif", WebkitFontSmoothing: "antialiased" }}>
+      {/* Nav */}
+      <header style={{ borderBottom: "1px solid rgba(20,19,15,.08)" }}>
+        <div style={{ maxWidth: 1180, margin: "0 auto", padding: "18px 36px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <Link href="/" style={{ fontWeight: 700, fontSize: 19, letterSpacing: "-.02em", display: "flex", alignItems: "center", gap: 9 }}>
+            <span style={{ width: 9, height: 9, borderRadius: "50%", background: ACCENT, display: "inline-block" }} />
+            Arvexo Connect
+          </Link>
+          <nav style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+            {[
+              { href: "/cabinet",          label: "Кабинет" },
+              { href: "/cabinet/orders",   label: "Заказы" },
+              { href: "/cabinet/settings", label: "Настройки" },
+              { href: "/cabinet/support",  label: "Поддержка" },
+            ].map((l) => (
+              <Link key={l.href} href={l.href} style={{ fontSize: 14, fontWeight: 500, color: "#57534B" }}>
+                {l.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+      </header>
+
+      <main style={{ maxWidth: 1180, margin: "0 auto", padding: "48px 36px 80px" }}>
+        <h1 style={{ fontWeight: 700, fontSize: "clamp(26px,3vw,36px)", letterSpacing: "-.03em", marginBottom: 32 }}>
+          {title}
+        </h1>
+        {children}
+      </main>
+
+      <footer style={{ borderTop: "1px solid rgba(20,19,15,.08)" }}>
+        <div style={{ maxWidth: 1180, margin: "0 auto", padding: "24px 36px", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#A39E93" }}>© 2026 Arvexo</span>
+          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#A39E93" }}>connect.arvexo.ru</span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+/* ─── Orders ─────────────────────────────────────────────────────── */
 
 export function OrdersApp() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [error, setError] = useState("");
   const [deletingOrderId, setDeletingOrderId] = useState("");
 
-  useEffect(() => {
-    void loadOrders();
-  }, []);
+  useEffect(() => { void loadOrders(); }, []);
 
   async function loadOrders() {
     const jwt = requireJwt();
     if (!jwt) return;
     try {
-      const body = await fetch(`${getApiBase()}/api/cabinet/orders`, { headers: { Authorization: `Bearer ${jwt}` } }).then(checkAuth);
+      const body = await fetch(`${getApiBase()}/api/cabinet/orders`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+      }).then(checkAuth);
       setOrders(body.orders || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить заказы");
@@ -110,47 +159,67 @@ export function OrdersApp() {
     }
   }
 
+  const statusLabel: Record<string, string> = {
+    pending: "Ожидает оплаты", waiting_confirmation: "На проверке", paid: "Оплачен", cancelled: "Отменён",
+  };
+
   return (
-    <CabinetShell title="Заказы">
+    <CabinetShell title="История заказов">
       {error && <Notice tone="error">{error}</Notice>}
-      <div className="grid gap-3">
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {orders.map((order) => (
-          <div key={order.id} className="rounded-lg border border-white/[0.08] bg-[#101010] p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <div key={order.id} style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 16, padding: "24px" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
               <div>
-                <p className="text-sm font-bold">{order.plan_name || "Order"}</p>
-                <p className="mt-1 text-xs text-white/45">{new Date(order.created_at).toLocaleString()}</p>
+                <p style={{ fontWeight: 700, fontSize: 16 }}>{order.plan_name || "Order"}</p>
+                <p style={{ marginTop: 4, fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: "#8A857B" }}>
+                  {new Date(order.created_at).toLocaleString("ru-RU")}
+                </p>
               </div>
-              <span className="text-sm font-bold text-[#ffb3bb]">{order.status}</span>
+              <span style={{
+                display: "inline-flex", padding: "5px 14px", borderRadius: 100,
+                fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 600,
+                background: order.status === "paid" ? "rgba(31,180,106,.1)" : "rgba(20,19,15,.07)",
+                color: order.status === "paid" ? SUCCESS : "#57534B",
+              }}>
+                {statusLabel[order.status] || order.status}
+              </span>
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-4">
-              <Info label="Цена" value={formatMoney(order.amount, order.currency)} />
-              <Info label="К оплате" value={`${order.payment_amount || order.amount} ${order.payment_currency || order.currency}`} />
-              <Info label="Метод" value={order.payment_method} />
-              <Info label="Tx / comment" value={order.tx_hash || "не отправлен"} />
-              <Info label="Оплачен" value={order.paid_at ? new Date(order.paid_at).toLocaleString() : "нет"} />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }} className="order-grid">
+              <InfoTile label="Цена" value={formatMoney(order.amount, order.currency)} />
+              <InfoTile label="К оплате" value={`${order.payment_amount || order.amount} ${order.payment_currency || order.currency}`} />
+              <InfoTile label="Метод" value={order.payment_method} />
+              <InfoTile label="Tx / comment" value={order.tx_hash || "—"} />
+              <InfoTile label="Оплачен" value={order.paid_at ? new Date(order.paid_at).toLocaleString("ru-RU") : "—"} />
             </div>
             {["pending", "waiting_confirmation"].includes(order.status) && (
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Link href={`/cabinet/checkout?order=${order.id}`} className="inline-flex min-h-10 items-center rounded-lg bg-[#ef233c] px-4 text-sm font-bold">
+              <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <Link href={`/cabinet/checkout?order=${order.id}`}
+                  style={{ display: "inline-flex", alignItems: "center", padding: "10px 22px", borderRadius: 100, background: ACCENT, color: "#fff", fontSize: 14, fontWeight: 600 }}>
                   Продолжить оплату
                 </Link>
                 <button
                   onClick={() => deleteOrder(order.id)}
                   disabled={deletingOrderId === order.id}
-                  className="min-h-10 rounded-lg border border-white/[0.12] px-4 text-sm font-bold text-white/72 disabled:opacity-50"
-                >
-                  {deletingOrderId === order.id ? "Удаляем..." : "Удалить"}
+                  style={{ padding: "10px 20px", borderRadius: 100, border: "1px solid rgba(20,19,15,.14)", background: "none", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Onest',sans-serif", opacity: deletingOrderId === order.id ? .5 : 1, color: "#57534B" }}>
+                  {deletingOrderId === order.id ? "Удаляем…" : "Удалить"}
                 </button>
               </div>
             )}
           </div>
         ))}
-        {!orders.length && <Empty text="История заказов пока пуста." />}
+        {!orders.length && (
+          <div style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 16, padding: 32, textAlign: "center", color: "#8A857B", fontSize: 15 }}>
+            История заказов пока пуста.
+          </div>
+        )}
       </div>
+      <style>{`@media (max-width: 600px) { .order-grid { grid-template-columns: 1fr 1fr !important; } }`}</style>
     </CabinetShell>
   );
 }
+
+/* ─── Settings ───────────────────────────────────────────────────── */
 
 export function SettingsApp() {
   const [displayName, setDisplayName] = useState("");
@@ -160,15 +229,15 @@ export function SettingsApp() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    void loadSettings();
-  }, []);
+  useEffect(() => { void loadSettings(); }, []);
 
   async function loadSettings() {
     const jwt = requireJwt();
     if (!jwt) return;
     try {
-      const body = await fetch(`${getApiBase()}/api/cabinet/settings`, { headers: { Authorization: `Bearer ${jwt}` } }).then(checkAuth);
+      const body = await fetch(`${getApiBase()}/api/cabinet/settings`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+      }).then(checkAuth);
       setDisplayName(body.display_name || "");
       setEmail(body.email || "");
       setActiveKeys(body.active_access_keys || 0);
@@ -197,7 +266,7 @@ export function SettingsApp() {
       headers: { Authorization: `Bearer ${jwt}` },
     }).then(checkAuth);
     setAccessKey(body.access_key);
-    setActiveKeys((value) => value + 1);
+    setActiveKeys((v) => v + 1);
   }
 
   function logout() {
@@ -207,71 +276,103 @@ export function SettingsApp() {
 
   return (
     <CabinetShell title="Настройки">
-      {error && <Notice tone="error">{error}</Notice>}
+      {error   && <Notice tone="error">{error}</Notice>}
       {message && <Notice>{message}</Notice>}
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} className="settings-grid">
         <Panel title="Аккаунт">
-          <Info label="Email" value={email || "Access key account"} />
-          <label className="mt-4 grid gap-2 text-sm text-white/56">
+          <InfoTile label="Email" value={email || "Access key account"} />
+          <label style={{ display: "grid", gap: 8, fontSize: 13, color: "#8A857B", marginTop: 16 }}>
             Display name
-            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} className="h-12 rounded-lg border border-white/[0.1] bg-black px-4 text-white" />
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              style={{ height: 48, borderRadius: 12, border: "1px solid rgba(20,19,15,.14)", background: "#fff", padding: "0 16px", fontSize: 15, color: "#14130F", fontFamily: "'Onest',sans-serif", outline: "none" }}
+            />
           </label>
-          <button onClick={saveSettings} className="mt-4 min-h-11 rounded-lg bg-[#ef233c] px-4 text-sm font-bold">Сохранить</button>
+          <button onClick={saveSettings} style={accentBtn}>Сохранить</button>
         </Panel>
+
         <Panel title="Access keys">
-          <Info label="Активные ключи" value={String(activeKeys)} />
-          <button onClick={issueAccessKey} className="mt-4 min-h-11 rounded-lg bg-white px-4 text-sm font-bold text-black">Создать access key</button>
-          {accessKey && <Notice>Новый ключ показывается один раз: {accessKey}</Notice>}
+          <InfoTile label="Активные ключи" value={String(activeKeys)} />
+          <button onClick={issueAccessKey} style={{ ...accentBtn, background: "#14130F" }}>Создать access key</button>
+          {accessKey && <Notice>Новый ключ показывается один раз: <strong style={{ fontFamily: "'JetBrains Mono',monospace" }}>{accessKey}</strong></Notice>}
         </Panel>
+
         <Panel title="Telegram">
-          <p className="text-sm leading-6 text-white/56">Подключение и отключение Telegram доступно на главной странице кабинета.</p>
-          <Link href="/cabinet" className="mt-4 inline-flex min-h-10 items-center rounded-lg border border-white/[0.12] px-4 text-sm font-bold">Открыть кабинет</Link>
+          <p style={{ fontSize: 14, color: "#57534B", lineHeight: 1.6 }}>
+            Подключение и отключение Telegram доступно на главной странице кабинета.
+          </p>
+          <Link href="/cabinet" style={{ display: "inline-flex", alignItems: "center", marginTop: 16, padding: "10px 20px", borderRadius: 100, border: "1px solid rgba(20,19,15,.14)", fontSize: 14, fontWeight: 600, color: "#14130F" }}>
+            Открыть кабинет
+          </Link>
         </Panel>
+
         <Panel title="Аккаунт и доступ">
-          <button onClick={logout} className="min-h-11 rounded-lg border border-white/[0.12] px-4 text-sm font-bold">Выйти</button>
-          <p className="mt-4 text-sm leading-6 text-white/45">Запрос на удаление аккаунта: напишите в поддержку, указав email или access key prefix.</p>
+          <button onClick={logout} style={{ ...accentBtn, background: "transparent", color: "#57534B", border: "1px solid rgba(20,19,15,.14)" }}>
+            Выйти
+          </button>
+          <p style={{ marginTop: 16, fontSize: 13, lineHeight: 1.6, color: "#8A857B" }}>
+            Запрос на удаление аккаунта: напишите в поддержку, указав email или access key prefix.
+          </p>
         </Panel>
       </div>
+      <style>{`@media (max-width: 720px) { .settings-grid { grid-template-columns: 1fr !important; } }`}</style>
     </CabinetShell>
   );
 }
 
+/* ─── Support ────────────────────────────────────────────────────── */
+
 export function SupportApp() {
   const [problem, setProblem] = useState("telegram");
   const steps = repairSteps[problem] || repairSteps.unknown;
+  const problemLabel = repairLabels.find(([v]) => v === problem)?.[1] || "Решение";
 
   return (
     <CabinetShell title="Поддержка">
-      <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+      <div style={{ display: "grid", gridTemplateColumns: "0.8fr 1.2fr", gap: 16 }} className="support-grid">
         <Panel title="Arvexo Repair">
-          <div className="grid gap-2">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {repairLabels.map(([value, label]) => (
               <button
                 key={value}
                 onClick={() => setProblem(value)}
-                className={`rounded-lg border p-3 text-left text-sm font-bold ${problem === value ? "border-[#ef233c] bg-[#ef233c]/10" : "border-white/[0.08] bg-black/25"}`}
+                style={{
+                  background: problem === value ? `rgba(229,64,44,.08)` : "#EEEBE3",
+                  border: `1px solid ${problem === value ? ACCENT : "rgba(20,19,15,.1)"}`,
+                  borderRadius: 10, padding: "12px 16px", textAlign: "left",
+                  fontSize: 14, fontWeight: 600, cursor: "pointer",
+                  color: problem === value ? ACCENT : "#14130F",
+                  fontFamily: "'Onest',sans-serif",
+                }}
               >
                 {label}
               </button>
             ))}
           </div>
         </Panel>
-        <Panel title={repairLabels.find(([value]) => value === problem)?.[1] || "Решение"}>
-          <ol className="grid gap-3">
-            {steps.map((step, index) => (
-              <li key={step} className="rounded-lg border border-white/[0.08] bg-black/25 p-4 text-sm leading-6 text-white/72">
-                {index + 1}. {step}
+
+        <Panel title={problemLabel}>
+          <ol style={{ display: "flex", flexDirection: "column", gap: 10, listStyle: "none", padding: 0, margin: 0 }}>
+            {steps.map((step, i) => (
+              <li key={step} style={{ display: "flex", gap: 16, background: "#EEEBE3", border: "1px solid rgba(20,19,15,.09)", borderRadius: 10, padding: "16px 18px", alignItems: "flex-start" }}>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: ACCENT, flexShrink: 0, paddingTop: 2 }}>0{i + 1}</span>
+                <span style={{ fontSize: 14, lineHeight: 1.6, color: "#3B382F" }}>{step}</span>
               </li>
             ))}
           </ol>
-          <a href="https://t.me/arvexo_support" target="_blank" rel="noreferrer" className="mt-5 inline-flex min-h-11 items-center rounded-lg bg-[#ef233c] px-4 text-sm font-bold">
+          <a href="https://t.me/arvexo_support" target="_blank" rel="noreferrer"
+            style={{ display: "inline-flex", alignItems: "center", marginTop: 20, padding: "12px 24px", borderRadius: 100, background: ACCENT, color: "#fff", fontSize: 14.5, fontWeight: 600 }}>
             Написать в поддержку
           </a>
         </Panel>
       </div>
+      <style>{`@media (max-width: 720px) { .support-grid { grid-template-columns: 1fr !important; } }`}</style>
     </CabinetShell>
   );
 }
+
+/* ─── Subscription detail ────────────────────────────────────────── */
 
 export function SubscriptionDetailApp({ token }: { token: string }) {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -282,7 +383,10 @@ export function SubscriptionDetailApp({ token }: { token: string }) {
   const [telegramLink, setTelegramLink] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const rawUrl = useMemo(() => subscription?.raw_subscription_url || `${subscription?.public_subscription_url || ""}?format=raw`, [subscription]);
+  const rawUrl = useMemo(
+    () => subscription?.raw_subscription_url || `${subscription?.public_subscription_url || ""}?format=raw`,
+    [subscription]
+  );
 
   useEffect(() => {
     void loadSubscription();
@@ -293,56 +397,39 @@ export function SubscriptionDetailApp({ token }: { token: string }) {
     const jwt = requireJwt();
     if (!jwt) return;
     await fetch(`${getApiBase()}/api/cabinet/subscription/${token}`, { headers: { Authorization: `Bearer ${jwt}` } })
-      .then(checkAuth)
-      .then((body) => setSubscription(body))
-      .catch(() => setSubscription(null));
+      .then(checkAuth).then((body) => setSubscription(body)).catch(() => setSubscription(null));
     await fetch(`${getApiBase()}/api/cabinet/subscription/${token}/devices`, { headers: { Authorization: `Bearer ${jwt}` } })
-      .then(checkAuth)
-      .then((body) => setDevices(body.devices || []))
-      .catch(() => setDevices([]));
+      .then(checkAuth).then((body) => setDevices(body.devices || [])).catch(() => setDevices([]));
   }
 
   async function loadTelegramStatus() {
     const jwt = requireJwt();
     if (!jwt) return;
-    const response = await fetch(`${getApiBase()}/api/cabinet/telegram/status`, { headers: { Authorization: `Bearer ${jwt}` } });
-    if (response.ok) {
-      const payload = (await response.json()) as { connected: boolean };
-      setTelegramConnected(payload.connected);
-    }
+    const res = await fetch(`${getApiBase()}/api/cabinet/telegram/status`, { headers: { Authorization: `Bearer ${jwt}` } });
+    if (res.ok) setTelegramConnected(((await res.json()) as { connected: boolean }).connected);
   }
 
   async function changeMode(mode: string) {
     const jwt = requireJwt();
     if (!jwt || !subscription) return;
-    setError("");
-    setMessage("");
-    const response = await fetch(`${getApiBase()}/api/cabinet/subscription/${subscription.token}/mode`, {
+    setError(""); setMessage("");
+    const res = await fetch(`${getApiBase()}/api/cabinet/subscription/${subscription.token}/mode`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
       body: JSON.stringify({ mode }),
     });
-    if (!response.ok) {
-      setError(await readApiError(response, "Не удалось изменить режим"));
-      return;
-    }
+    if (!res.ok) { setError(await readApiError(res, "Не удалось изменить режим")); return; }
     setSubscription({ ...subscription, routing_mode: mode });
-    setMessage("Режим изменён. Чтобы применить его, обновите подписку в VPN-приложении.");
+    setMessage("Режим изменён. Обновите подписку в VPN-приложении, чтобы применить.");
   }
 
   async function createTelegramLink() {
     const jwt = requireJwt();
     if (!jwt) return;
     setError("");
-    const response = await fetch(`${getApiBase()}/api/cabinet/telegram/link-token`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${jwt}` },
-    });
-    if (!response.ok) {
-      setError("Не удалось создать ссылку Telegram");
-      return;
-    }
-    const payload = (await response.json()) as { telegram_link_url: string };
+    const res = await fetch(`${getApiBase()}/api/cabinet/telegram/link-token`, { method: "POST", headers: { Authorization: `Bearer ${jwt}` } });
+    if (!res.ok) { setError("Не удалось создать ссылку Telegram"); return; }
+    const payload = (await res.json()) as { telegram_link_url: string };
     setTelegramLink(payload.telegram_link_url);
     window.location.assign(payload.telegram_link_url);
   }
@@ -351,15 +438,12 @@ export function SubscriptionDetailApp({ token }: { token: string }) {
     const jwt = requireJwt();
     if (!jwt || !subscription || !deviceName.trim()) return;
     setError("");
-    const response = await fetch(`${getApiBase()}/api/cabinet/subscription/${subscription.token}/devices`, {
+    const res = await fetch(`${getApiBase()}/api/cabinet/subscription/${subscription.token}/devices`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
       body: JSON.stringify({ name: deviceName.trim(), type: deviceType }),
     });
-    if (!response.ok) {
-      setError(await readApiError(response, "Не удалось добавить устройство"));
-      return;
-    }
+    if (!res.ok) { setError(await readApiError(res, "Не удалось добавить устройство")); return; }
     setDeviceName("");
     await loadSubscription();
   }
@@ -367,200 +451,234 @@ export function SubscriptionDetailApp({ token }: { token: string }) {
   async function deleteDevice(deviceId: string) {
     const jwt = requireJwt();
     if (!jwt || !subscription) return;
-    const response = await fetch(`${getApiBase()}/api/cabinet/subscription/${subscription.token}/devices/${deviceId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${jwt}` },
+    const res = await fetch(`${getApiBase()}/api/cabinet/subscription/${subscription.token}/devices/${deviceId}`, {
+      method: "DELETE", headers: { Authorization: `Bearer ${jwt}` },
     });
-    if (response.ok) await loadSubscription();
+    if (res.ok) await loadSubscription();
   }
 
   return (
     <CabinetShell title="Подписка">
       {!subscription ? (
-        <Empty text="Подписка не найдена или недоступна." />
+        <div style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 16, padding: 32, color: "#8A857B" }}>
+          Подписка не найдена или недоступна.
+        </div>
       ) : (
-        <div className="grid gap-5">
-          <Link href="/cabinet" className="text-sm font-bold text-white/60 hover:text-white">← Все подписки</Link>
-          <Panel title={subscription.status === "active" ? "Подписка активна" : statusLabel(subscription.status)}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <Link href="/cabinet" style={{ fontSize: 14, fontWeight: 600, color: "#57534B" }}>← Все подписки</Link>
+
+          {/* Status panel */}
+          <Panel title={statusLabel(subscription.status)}>
             {subscription.status === "provisioning_failed" && <Notice tone="error">Доступ готовится, поддержка уже уведомлена.</Notice>}
-            <p className="mt-3 text-sm text-white/56">
+            <p style={{ marginTop: 8, fontSize: 14, color: "#57534B" }}>
               {modeLabel(subscription.routing_mode)} · {subscription.days_left === null ? "без срока" : `осталось ${subscription.days_left} дней`} · {devices.length}/{subscription.device_limit} устройств
             </p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <button onClick={() => navigator.clipboard.writeText(rawUrl)} className="min-h-11 rounded-lg bg-[#ef233c] px-4 text-sm font-bold">Скопировать ссылку</button>
-              <a href="#qr" className="inline-flex min-h-11 items-center rounded-lg border border-white/[0.12] px-4 text-sm font-bold">Показать QR</a>
-              <Link href="/instructions/iphone" className="inline-flex min-h-11 items-center rounded-lg border border-white/[0.12] px-4 text-sm font-bold">Инструкция</Link>
-              <Link href="/cabinet/support" className="inline-flex min-h-11 items-center rounded-lg border border-white/[0.12] px-4 text-sm font-bold">Не работает</Link>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 20, marginBottom: 20 }}>
+              <button onClick={() => navigator.clipboard.writeText(rawUrl)} style={accentBtn}>Скопировать ссылку</button>
+              <a href="#qr" style={{ ...outlineBtn, display: "inline-flex", alignItems: "center" }}>Показать QR</a>
+              <Link href="/instructions/iphone" style={{ ...outlineBtn, display: "inline-flex", alignItems: "center" }}>Инструкция</Link>
+              <Link href="/cabinet/support" style={{ ...outlineBtn, display: "inline-flex", alignItems: "center" }}>Не работает</Link>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Info label="Статус" value={subscription.status} />
-              <Info label="Режим" value={subscription.routing_mode} />
-              <Info label="Осталось" value={subscription.days_left === null ? "без срока" : `${subscription.days_left} дней`} />
-              <Info label="Устройства" value={`${devices.length}/${subscription.device_limit}`} />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 }} className="sub-info-grid">
+              <InfoTile label="Статус" value={subscription.status} />
+              <InfoTile label="Режим" value={subscription.routing_mode} />
+              <InfoTile label="Осталось" value={subscription.days_left === null ? "без срока" : `${subscription.days_left} дней`} />
+              <InfoTile label="Устройства" value={`${devices.length}/${subscription.device_limit}`} />
             </div>
             {message && <Notice>{message}</Notice>}
-            {error && <Notice tone="error">{error}</Notice>}
+            {error   && <Notice tone="error">{error}</Notice>}
           </Panel>
 
-          <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
-            <Panel title="QR-код" >
+          {/* QR + URL */}
+          <div style={{ display: "grid", gridTemplateColumns: "0.8fr 1.2fr", gap: 16 }} className="qr-grid">
+            <Panel title="QR-код">
               <div id="qr">
-                <img alt="Subscription QR" className="aspect-square w-full max-w-sm rounded-lg bg-white p-4" src={`https://api.qrserver.com/v1/create-qr-code/?size=420x420&data=${encodeURIComponent(rawUrl)}`} />
+                {subscription.qr_image_base64 ? (
+                  <img alt="Subscription QR" style={{ width: "100%", maxWidth: 240, borderRadius: 12, background: "#fff", padding: 12 }} src={subscription.qr_image_base64} />
+                ) : (
+                  <p style={{ fontSize: 13, color: "#8A857B" }}>QR недоступен</p>
+                )}
               </div>
             </Panel>
             <Panel title="Subscription URL">
-            <div className="mt-5 rounded-lg border border-white/[0.08] bg-black/25 p-4">
-              <p className="text-xs text-white/45">Raw subscription</p>
-              <p className="mt-2 break-all text-sm text-white/72">{rawUrl}</p>
-              <button onClick={() => navigator.clipboard.writeText(rawUrl)} className="mt-4 min-h-10 rounded-lg bg-[#ef233c] px-4 text-sm font-bold">Скопировать raw</button>
-            </div>
+              <div style={{ background: "#EEEBE3", border: "1px solid rgba(20,19,15,.09)", borderRadius: 12, padding: "16px 18px", marginTop: 8 }}>
+                <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "#8A857B", marginBottom: 8 }}>Raw subscription URL</p>
+                <p style={{ fontSize: 13, wordBreak: "break-all", color: "#3B382F", lineHeight: 1.55 }}>{rawUrl}</p>
+                <button onClick={() => navigator.clipboard.writeText(rawUrl)} style={{ ...accentBtn, marginTop: 14, padding: "10px 18px" }}>Скопировать raw</button>
+              </div>
             </Panel>
           </div>
 
+          {/* Mode selector */}
           <Panel title="Режим подключения">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }} className="mode-grid">
               {modes.map((mode) => (
                 <button
                   key={mode.value}
                   onClick={() => changeMode(mode.value)}
-                  className={`rounded-lg border p-4 text-left ${subscription.routing_mode === mode.value ? "border-[#ef233c] bg-[#ef233c]/12" : "border-white/[0.08] bg-black/25 hover:border-[#ef233c]/45"}`}
+                  style={{
+                    background: subscription.routing_mode === mode.value ? `rgba(229,64,44,.06)` : "#EEEBE3",
+                    border: `1px solid ${subscription.routing_mode === mode.value ? ACCENT : "rgba(20,19,15,.1)"}`,
+                    borderRadius: 12, padding: "18px 16px", textAlign: "left",
+                    cursor: "pointer", fontFamily: "'Onest',sans-serif",
+                  }}
                 >
-                  <span className="text-base font-semibold">{mode.title}</span>
-                  <span className="mt-2 block text-sm leading-5 text-white/56">{mode.text}</span>
+                  <span style={{ display: "block", fontSize: 15, fontWeight: 600, color: "#14130F", marginBottom: 6 }}>{mode.title}</span>
+                  <span style={{ display: "block", fontSize: 13, color: "#57534B", lineHeight: 1.5 }}>{mode.text}</span>
                 </button>
               ))}
             </div>
           </Panel>
 
-          <div className="grid gap-5 lg:grid-cols-2">
+          {/* Devices + Telegram */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} className="dev-grid">
             <Panel title="Устройства">
-              <p className="text-sm text-white/48">{devices.length}/{subscription.device_limit}</p>
-              <div className="mt-4 grid gap-2">
+              <p style={{ fontSize: 13, color: "#8A857B", marginBottom: 16 }}>{devices.length}/{subscription.device_limit}</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
                 {devices.map((device) => (
-                  <div key={device.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.08] bg-black/25 p-3">
+                  <div key={device.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: "#EEEBE3", border: "1px solid rgba(20,19,15,.09)", borderRadius: 10, padding: "12px 16px" }}>
                     <div>
-                      <p className="text-sm font-bold">{device.name}</p>
-                      <p className="text-xs text-white/45">{device.type || "device"}{device.last_seen_at ? ` · ${new Date(device.last_seen_at).toLocaleString()}` : ""}</p>
+                      <p style={{ fontSize: 14, fontWeight: 600 }}>{device.name}</p>
+                      <p style={{ fontSize: 12, color: "#8A857B" }}>{device.type || "device"}{device.last_seen_at ? ` · ${new Date(device.last_seen_at).toLocaleString("ru-RU")}` : ""}</p>
                     </div>
-                    <button onClick={() => deleteDevice(device.id)} className="rounded-lg border border-white/[0.1] px-3 py-2 text-xs font-bold">Удалить</button>
+                    <button onClick={() => deleteDevice(device.id)}
+                      style={{ padding: "6px 14px", borderRadius: 100, border: "1px solid rgba(20,19,15,.14)", background: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Onest',sans-serif", color: "#57534B" }}>
+                      Удалить
+                    </button>
                   </div>
                 ))}
-                {!devices.length && <p className="text-sm text-white/45">Устройства пока не добавлены.</p>}
+                {!devices.length && <p style={{ fontSize: 13, color: "#8A857B" }}>Устройства пока не добавлены.</p>}
               </div>
-              <div className="mt-4 grid gap-2">
-                <input value={deviceName} onChange={(event) => setDeviceName(event.target.value)} placeholder="Название устройства" className="h-11 rounded-lg border border-white/[0.1] bg-black px-3 text-sm text-white outline-none focus:border-[#ef233c]" />
-                <select value={deviceType} onChange={(event) => setDeviceType(event.target.value)} className="h-11 rounded-lg border border-white/[0.1] bg-black px-3 text-sm text-white outline-none focus:border-[#ef233c]">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <input value={deviceName} onChange={(e) => setDeviceName(e.target.value)}
+                  placeholder="Название устройства"
+                  style={{ height: 44, borderRadius: 10, border: "1px solid rgba(20,19,15,.14)", padding: "0 14px", fontSize: 14, color: "#14130F", fontFamily: "'Onest',sans-serif", outline: "none", background: "#fff" }} />
+                <select value={deviceType} onChange={(e) => setDeviceType(e.target.value)}
+                  style={{ height: 44, borderRadius: 10, border: "1px solid rgba(20,19,15,.14)", padding: "0 14px", fontSize: 14, color: "#14130F", fontFamily: "'Onest',sans-serif", outline: "none", background: "#fff" }}>
                   <option value="iphone">iPhone</option>
                   <option value="android">Android</option>
                   <option value="windows">Windows</option>
                   <option value="macos">macOS</option>
                   <option value="other">Другое</option>
                 </select>
-                <button onClick={addDevice} disabled={!deviceName.trim() || devices.length >= subscription.device_limit} className="min-h-11 rounded-lg bg-white px-4 text-sm font-bold text-black disabled:opacity-50">Добавить устройство</button>
+                <button onClick={addDevice} disabled={!deviceName.trim() || devices.length >= subscription.device_limit}
+                  style={{ ...accentBtn, opacity: (!deviceName.trim() || devices.length >= subscription.device_limit) ? .5 : 1 }}>
+                  Добавить устройство
+                </button>
               </div>
             </Panel>
 
             <Panel title="Telegram">
-              <p className="text-sm text-white/56">{telegramConnected ? "Telegram подключён." : "Подключите Telegram для управления подпиской и уведомлений."}</p>
-              {!telegramConnected && <button onClick={createTelegramLink} className="mt-4 min-h-11 rounded-lg bg-[#ef233c] px-4 text-sm font-bold">Подключить Telegram</button>}
-              {telegramLink && <a href={telegramLink} className="mt-3 block break-all text-sm font-semibold text-[#ffb3bb]">{telegramLink}</a>}
+              <p style={{ fontSize: 14, color: "#57534B", lineHeight: 1.6, marginBottom: 16 }}>
+                {telegramConnected ? "Telegram подключён." : "Подключите Telegram для управления подпиской и уведомлений."}
+              </p>
+              {!telegramConnected && (
+                <button onClick={createTelegramLink} style={accentBtn}>Подключить Telegram</button>
+              )}
+              {telegramLink && <a href={telegramLink} style={{ marginTop: 10, display: "block", fontSize: 13, color: "#8A857B", wordBreak: "break-all" }}>{telegramLink}</a>}
             </Panel>
           </div>
 
+          {/* Instructions */}
           <Panel title="Как подключиться">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <InstructionLink href="/instructions/iphone" label="iPhone" />
-              <InstructionLink href="/instructions/android" label="Android" />
-              <InstructionLink href="/instructions/windows" label="Windows" />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }} className="inst-grid">
+              {[["iPhone", "/instructions/iphone"], ["Android", "/instructions/android"], ["Windows", "/instructions/windows"]].map(([label, href]) => (
+                <Link key={href} href={href}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#EEEBE3", border: "1px solid rgba(20,19,15,.09)", borderRadius: 10, padding: "16px 18px", fontSize: 14, fontWeight: 600, color: "#14130F" }}>
+                  {label} <span style={{ color: ACCENT }}>→</span>
+                </Link>
+              ))}
             </div>
           </Panel>
         </div>
       )}
+      <style>{`
+        @media (max-width: 720px) { .qr-grid, .dev-grid { grid-template-columns: 1fr !important; } }
+        @media (max-width: 560px) { .mode-grid, .inst-grid { grid-template-columns: 1fr !important; } }
+        @media (max-width: 480px) { .sub-info-grid { grid-template-columns: 1fr !important; } }
+      `}</style>
     </CabinetShell>
   );
 }
 
-function CabinetShell({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <main className="min-h-screen bg-[#050505] px-4 py-8 text-white">
-      <section className="mx-auto max-w-6xl">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] pb-6">
-          <Link href="/cabinet" className="text-lg font-semibold">Arvexo Connect</Link>
-          <nav className="flex flex-wrap gap-2 text-sm font-bold text-white/64">
-            <Link href="/cabinet">Кабинет</Link>
-            <Link href="/cabinet/orders">Заказы</Link>
-            <Link href="/cabinet/settings">Настройки</Link>
-            <Link href="/cabinet/support">Поддержка</Link>
-          </nav>
-        </header>
-        <h1 className="mt-8 text-3xl font-bold">{title}</h1>
-        <div className="mt-6">{children}</div>
-      </section>
-    </main>
-  );
-}
+/* ─── Primitives ─────────────────────────────────────────────────── */
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-white/[0.08] bg-[#101010] p-5">
-      <h2 className="text-xl font-semibold">{title}</h2>
-      <div className="mt-4">{children}</div>
+    <section style={{ background: "#FBFAF7", border: "1px solid rgba(20,19,15,.09)", borderRadius: 16, padding: "24px" }}>
+      <h2 style={{ fontWeight: 700, fontSize: 18, letterSpacing: "-.02em", marginBottom: 16 }}>{title}</h2>
+      {children}
     </section>
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function InfoTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-white/[0.08] bg-black/25 p-4">
-      <p className="text-xs text-white/45">{label}</p>
-      <p className="mt-2 break-words text-sm font-semibold">{value}</p>
+    <div style={{ background: "#EEEBE3", border: "1px solid rgba(20,19,15,.09)", borderRadius: 10, padding: "12px 14px" }}>
+      <p style={{ fontSize: 11.5, color: "#8A857B", marginBottom: 6 }}>{label}</p>
+      <p style={{ fontSize: 14, fontWeight: 600, wordBreak: "break-all" }}>{value}</p>
     </div>
   );
 }
 
 function Notice({ children, tone = "success" }: { children: ReactNode; tone?: "success" | "error" }) {
+  const styles =
+    tone === "error"
+      ? { background: "rgba(229,64,44,.08)", border: "1px solid rgba(229,64,44,.2)", color: ACCENT }
+      : { background: "rgba(31,180,106,.08)", border: "1px solid rgba(31,180,106,.2)", color: "#1B9E5E" };
   return (
-    <p className={`mt-4 rounded-lg border p-3 text-sm ${tone === "error" ? "border-[#ef233c]/30 bg-[#ef233c]/10 text-[#ffb3bb]" : "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"}`}>
+    <p style={{ padding: "12px 16px", borderRadius: 10, fontSize: 14, lineHeight: 1.5, marginTop: 12, ...styles }}>
       {children}
     </p>
   );
 }
 
-function Empty({ text }: { text: string }) {
-  return <div className="rounded-lg border border-white/[0.08] bg-[#101010] p-5 text-sm text-white/56">{text}</div>;
-}
+/* ─── Shared button styles ───────────────────────────────────────── */
 
-function InstructionLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link href={href} className="flex items-center justify-between rounded-lg border border-white/[0.08] bg-black/25 p-4 text-sm font-bold hover:border-[#ef233c]/45">
-      {label}
-      <span className="text-[#ff2b3a]">→</span>
-    </Link>
-  );
-}
+const accentBtn: React.CSSProperties = {
+  display: "inline-flex", alignItems: "center",
+  padding: "12px 24px", borderRadius: 100,
+  background: ACCENT, color: "#fff",
+  fontSize: 14, fontWeight: 600, border: "none",
+  cursor: "pointer", fontFamily: "'Onest',sans-serif",
+  marginTop: 12,
+};
+
+const outlineBtn: React.CSSProperties = {
+  padding: "11px 20px", borderRadius: 100,
+  border: "1px solid rgba(20,19,15,.14)",
+  background: "none", color: "#14130F",
+  fontSize: 14, fontWeight: 600,
+};
+
+/* ─── Helpers ────────────────────────────────────────────────────── */
 
 function statusLabel(status: string) {
-  if (status === "active") return "Подписка активна";
-  if (status === "trial") return "Тестовая подписка";
-  if (status === "expired") return "Подписка истекла";
-  if (status === "disabled") return "Подписка отключена";
+  if (status === "active")              return "Подписка активна";
+  if (status === "trial")               return "Тестовая подписка";
+  if (status === "expired")             return "Подписка истекла";
+  if (status === "disabled")            return "Подписка отключена";
   if (status === "provisioning_failed") return "Доступ готовится";
   return status;
 }
 
 function modeLabel(mode: string) {
-  if (mode === "smart") return "Smart Russia";
+  if (mode === "smart")   return "Smart Russia";
   if (mode === "privacy") return "Privacy Mode";
-  if (mode === "global") return "Global Mode";
+  if (mode === "global")  return "Global Mode";
   return mode;
 }
 
+function getApiBase() {
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname))
+    return "http://127.0.0.1:8012";
+  return "https://api.arvexo.ru";
+}
+
 function requireJwt() {
-  const jwt = localStorage.getItem(JWT_STORAGE_KEY);
-  if (!jwt) {
-    window.location.assign("/cabinet/login");
-    return "";
-  }
+  const jwt = typeof window !== "undefined" ? localStorage.getItem(JWT_STORAGE_KEY) : null;
+  if (!jwt) window.location.assign("/cabinet/login");
   return jwt;
 }
 
@@ -568,25 +686,10 @@ async function checkAuth(response: Response) {
   if (response.status === 401 || response.status === 403) {
     localStorage.removeItem(JWT_STORAGE_KEY);
     window.location.assign("/cabinet/login");
-    throw new Error("Нужно войти заново");
+    throw new Error("Unauthorized");
   }
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.detail || "API request failed");
-  }
+  if (!response.ok) throw new Error("Request failed");
   return response.json();
-}
-
-function getApiBase() {
-  if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) return "http://127.0.0.1:8012";
-  return "https://api.arvexo.ru";
-}
-
-function formatMoney(value: string | number, currency: string) {
-  const numeric = Number(value);
-  if (currency === "RUB") return `${Number.isFinite(numeric) ? numeric.toLocaleString("ru-RU", { maximumFractionDigits: 0 }) : value} ₽`;
-  return `${value} ${currency}`;
 }
 
 async function readApiError(response: Response, fallback: string) {
@@ -594,8 +697,13 @@ async function readApiError(response: Response, fallback: string) {
     const body = (await response.json()) as { detail?: string | { msg?: string }[] };
     if (typeof body.detail === "string" && body.detail.trim()) return body.detail;
     if (Array.isArray(body.detail) && body.detail[0]?.msg) return body.detail[0].msg;
-  } catch {
-    // Keep fallback when the API did not return JSON.
-  }
+  } catch { /* keep fallback */ }
   return fallback;
+}
+
+function formatMoney(value: string | number, currency: string) {
+  const numeric = Number(value);
+  if (currency === "RUB")
+    return `${Number.isFinite(numeric) ? numeric.toLocaleString("ru-RU", { maximumFractionDigits: 0 }) : value} ₽`;
+  return `${value} ${currency}`;
 }
