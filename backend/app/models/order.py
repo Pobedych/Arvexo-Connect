@@ -4,12 +4,12 @@ from decimal import Decimal
 from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text, text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.enums import OrderStatus, PaymentMethod
 from app.models.mixins import TimestampMixin
+from app.models.types import PgJSON
 
 if TYPE_CHECKING:
     from app.models.plan import Plan
@@ -48,7 +48,7 @@ class Order(TimestampMixin, Base):
     crypto_address: Mapped[Optional[str]] = mapped_column(String(256))
     crypto_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 8))
     tx_hash: Mapped[Optional[str]] = mapped_column(String(256))
-    order_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSONB)
+    order_metadata: Mapped[Optional[dict]] = mapped_column("metadata", PgJSON)
     paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
