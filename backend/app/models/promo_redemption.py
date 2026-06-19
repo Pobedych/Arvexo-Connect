@@ -19,7 +19,7 @@ class PromoRedemption(TimestampMixin, Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     promo_code_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("promo_codes.id", ondelete="CASCADE"), nullable=False)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     subscription_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("vpn_subscriptions.id", ondelete="CASCADE"), nullable=False)
 
     promo_code: Mapped["PromoCode"] = relationship(back_populates="redemptions")

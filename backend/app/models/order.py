@@ -3,7 +3,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, JSON, Numeric, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -18,6 +19,16 @@ if TYPE_CHECKING:
 
 class Order(TimestampMixin, Base):
     __tablename__ = "orders"
+    __table_args__ = (
+        Index("ix_orders_user_id", "user_id"),
+        Index("ix_orders_status", "status"),
+        Index(
+            "ix_orders_tx_hash_unique_crypto_manual",
+            "tx_hash",
+            unique=True,
+            postgresql_where=text("payment_method = 'crypto_manual' AND tx_hash IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
@@ -37,7 +48,7 @@ class Order(TimestampMixin, Base):
     crypto_address: Mapped[Optional[str]] = mapped_column(String(256))
     crypto_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 8))
     tx_hash: Mapped[Optional[str]] = mapped_column(String(256))
-    order_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSON)
+    order_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSONB)
     paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 

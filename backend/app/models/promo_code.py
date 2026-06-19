@@ -21,7 +21,7 @@ class PromoCode(TimestampMixin, Base):
     plan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("plans.id", ondelete="CASCADE"), nullable=False)
     code_hash: Mapped[str] = mapped_column(String(256), nullable=False)
     code_prefix: Mapped[str] = mapped_column(String(16), index=True, nullable=False)
-    status: Mapped[str] = mapped_column(String(32), default=PromoCodeStatus.ACTIVE.value, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default=PromoCodeStatus.ACTIVE.value, nullable=False, index=True)
     max_redemptions: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     redemptions_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

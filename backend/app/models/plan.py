@@ -2,7 +2,8 @@ import uuid
 from decimal import Decimal
 from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import Boolean, Integer, JSON, Numeric, String, Text
+from sqlalchemy import Boolean, Integer, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -26,7 +27,7 @@ class Plan(TimestampMixin, Base):
     duration_days: Mapped[int] = mapped_column(Integer, nullable=False)
     device_limit: Mapped[int] = mapped_column(Integer, nullable=False)
     is_custom: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    features: Mapped[Optional[dict]] = mapped_column(JSON)
+    features: Mapped[Optional[dict]] = mapped_column(JSONB)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     orders: Mapped[list["Order"]] = relationship(back_populates="plan")

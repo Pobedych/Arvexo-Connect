@@ -16,7 +16,7 @@ class Device(TimestampMixin, Base):
     __tablename__ = "devices"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    subscription_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("vpn_subscriptions.id", ondelete="CASCADE"), nullable=False)
+    subscription_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("vpn_subscriptions.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[Optional[str]] = mapped_column(Text)
     type: Mapped[Optional[str]] = mapped_column(String(64))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
